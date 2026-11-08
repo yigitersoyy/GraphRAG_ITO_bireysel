@@ -1,6 +1,7 @@
 import type {
   Answer,
   ClaimGraph,
+  DeletedNotePage,
   MapData,
   Note,
   NotePage,
@@ -67,6 +68,11 @@ export function params(
   ).toString();
 }
 export const api = {
+  deletedNotes: (cursor?: string, signal?: AbortSignal) =>
+    request<DeletedNotePage>(
+      "/api/v1/workspace/deleted-notes?" + params({ cursor }),
+      { signal },
+    ),
   map: (topic?: string, q?: string, cursor?: string) =>
     request<MapData>(
       "/api/v1/workspace/map?" + params({ topic_id: topic, q, cursor }),

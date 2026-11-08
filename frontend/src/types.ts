@@ -53,6 +53,16 @@ export type NotePage = {
   next_cursor: string | null;
   total: number;
 };
+export type DeletedNotePage = {
+  items: {
+    note_id: string;
+    title: string;
+    deleted_at: string;
+    content_purged: boolean;
+  }[];
+  total: number;
+  next_cursor: string | null;
+};
 export type Revision = {
   note_id: string;
   revision_id: string;

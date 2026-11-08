@@ -202,6 +202,48 @@ def note_map(
     )
 
 
+@router.get("/workspace/deleted-notes")
+def deleted_notes(
+    request: Request,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> JSONResponse:
+    """Tombstone metadata only; deleted content remains inaccessible to search and retrieval."""
+    parts = decode_cursor(cursor, 3)
+    after = None
+    if parts:
+        try:
+            stamp = datetime.fromisoformat(parts[1])
+            if parts[0] != "deleted-notes" or stamp.tzinfo is None:
+                raise ValueError("invalid deleted-notes cursor")
+        except ValueError as exc:
+            raise BadRequest("invalid deleted-notes cursor", code="INVALID_CURSOR") from exc
+        after = (stamp, parts[2])
+    notes, more, total = ctx_of(request).store.deleted_notes(after, limit)
+    last = notes[-1] if notes else None
+    nxt = (
+        encode_cursor("deleted-notes", last.deleted_at.isoformat(), last.note_id)
+        if more and last and last.deleted_at
+        else None
+    )
+    return ok(
+        request,
+        dict(
+            items=[
+                dict(
+                    note_id=n.note_id,
+                    title=n.title,
+                    deleted_at=iso(n.deleted_at),
+                    content_purged=not bool(n.desired_revision_id),
+                )
+                for n in notes
+            ],
+            total=total,
+            next_cursor=nxt,
+        ),
+    )
+
+
 @router.get("/search")
 def search(
     request: Request,

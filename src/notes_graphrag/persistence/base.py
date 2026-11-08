@@ -57,6 +57,9 @@ class Store(Protocol):
     def list_notes(
         self, after: tuple[datetime, str] | None, limit: int
     ) -> tuple[list[Note], bool]: ...
+    def deleted_notes(
+        self, after: tuple[datetime, str] | None, limit: int
+    ) -> tuple[list[Note], bool, int]: ...
     def delete_note(self, note_id: str, now: datetime) -> None: ...
 
     # jobs

@@ -110,6 +110,26 @@ Yeni regresyon önce eski UI'de üç sonucun kaldığını doğrulayarak başar�
 düzeltmeden sonra geçti. İki tarayıcı kontrolü, memory/Neo4j üzerinde dört API
 kontrolü ve beş Vitest testi geçti. Canlı UI de silinen kayıt için sıfır sonuçla doğrulandı.
 
+### Silinenler görünümü
+
+**Liste → Silinenler** düğmesi veya konu filtresindeki **Silinenler** seçeneği,
+silinen kayıtları ayrı ve sayfalı listeler. **Düzenlenmemiş**, konusu atanmamış
+aktif notlar için korunur; silinmiş olmakla aynı anlama gelmez. Silinen kayıtlar
+normal katalog, arama, graf ve soru kaynaklarına dahil edilmez.
+
+Yeni salt okunur API: `GET /api/v1/workspace/deleted-notes?limit=50&cursor=...`.
+Yalnızca `note_id`, `title`, `deleted_at`, `content_purged` ve sayfalama bilgisi
+döner; içerik veya eski kaynak metinleri açılmaz. En yeni silinenler önce gelir;
+aynı zaman damgasında kimlik sıralaması ve cursor sınırları iki store'da eşittir.
+Migration, silme davranışı ve saklama süresi değiştirilmedi. Mevcut içerik
+temizliği sonrası adı silinen tombstone'lar **İçeriği temizlenmiş not** olarak görünür.
+Geri yükleme veya kalıcı silme düğmesi bu kapsamda eklenmedi.
+
+Memory/Neo4j katalog ve store sözleşmeleri dahil 80 test geçti. Mobil görünümde
+silinenler listesi, normal listeye dönüş ve aramada bulunmama dahil 13 tarayıcı
+testi ve 5 Vitest testi geçti. Canlı API'de ilgili iki kaydın yalnızca Silinenler'de
+olduğu, arama ve Düzenlenmemiş sonuçlarına girmediği doğrulandı. Ruff ve mypy geçti.
+
 `backups/cleanup-c7c8f04/` ve `reports/` yalnızca yerelde tutulur. Tam yedek,
 okunabilir dışa aktarımın yerine geçmediği gibi dışa aktarım da tam yedek değildir.
 Canlı Compose projesi ve volume adı değiştirilmez. Migration 001–005, mevcut

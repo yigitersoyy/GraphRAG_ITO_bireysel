@@ -376,6 +376,26 @@ class Neo4jStore:
         notes = [_note(r["n"]) for r in rows]
         return notes[:limit], len(notes) > limit
 
+    def deleted_notes(
+        self, after: tuple[datetime, str] | None, limit: int
+    ) -> tuple[list[Note], bool, int]:
+        def fn(tx: ManagedTransaction) -> tuple[list[Note], bool, int]:
+            match = "MATCH (n:Note {workspace_id:$ws}) WHERE n.deleted_at IS NOT NULL "
+            total = int(tx.run(match + "RETURN count(n) AS c", ws=self.workspace_id).data()[0]["c"])
+            rows = tx.run(
+                match + "AND ($at IS NULL OR n.deleted_at < $at OR "
+                "(n.deleted_at = $at AND n.note_id < $id)) "
+                "RETURN n ORDER BY n.deleted_at DESC, n.note_id DESC LIMIT $lim",
+                ws=self.workspace_id,
+                at=to_iso(after[0]) if after else None,
+                id=after[1] if after else None,
+                lim=limit + 1,
+            ).data()
+            notes = [_note(row["n"]) for row in rows]
+            return notes[:limit], len(notes) > limit, total
+
+        return self._read(fn)
+
     def delete_note(self, note_id: str, now: datetime) -> None:
         ws, ts = self.workspace_id, to_iso(now)
 

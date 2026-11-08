@@ -1,6 +1,28 @@
 @layer base, layout, components, responsive;
 
 @layer components {
+  .deleted-notes {
+    padding: 4px 24px;
+  }
+  .deleted-notes h1 {
+    margin: 8px 0;
+  }
+  .deleted-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 155px 145px;
+    gap: 16px;
+    padding: 13px 8px;
+    border-bottom: 1px solid #ffffff12;
+    font-size: 13px;
+  }
+  .deleted-head,
+  .deleted-row time {
+    color: #a5a5a3;
+    font-size: 12px;
+  }
+  .deleted-title {
+    overflow-wrap: anywhere;
+  }
   .graph-view,
   .reference-graph {
     background: #000000;
@@ -133,6 +155,26 @@
   }
   .bulk-upload .panel-actions {
     flex-wrap: wrap;
+  }
+}
+
+@layer responsive {
+  @media (max-width: 760px) {
+    .deleted-notes {
+      padding: 4px 12px;
+    }
+    .deleted-row {
+      grid-template-columns: minmax(0, 1fr) 105px;
+      gap: 6px 12px;
+    }
+    .deleted-row > :last-child {
+      grid-column: 1 / -1;
+      color: #a5a5a3;
+      font-size: 12px;
+    }
+    .deleted-head > :last-child {
+      display: none;
+    }
   }
 }
 

@@ -6,6 +6,59 @@ const created: string[] = [],
   topics: { topic_id: string; version: number }[] = [];
 const screenshotDir = "../reports/frontend-e2e";
 
+test("deleted documents appear only in Deleted, with mobile list access", async ({
+  page,
+  request,
+}) => {
+  const saved = await json(request, "/api/v1/notes", {
+    title: "TrashOnly document",
+    text: "TrashOnly works on Project TrashOnly.",
+  });
+  created.push(saved.note_id);
+  await request.delete("/api/v1/notes/" + saved.note_id);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Liste", exact: true }).click();
+  await page
+    .getByLabel("Konu filtresi", { exact: true })
+    .selectOption("unsorted");
+  await expect(
+    page.getByRole("region", { name: "Not listesi", exact: true }),
+  ).not.toContainText("TrashOnly document");
+  await page.getByRole("button", { name: "Silinenler", exact: true }).click();
+  const trash = page.getByRole("region", {
+    name: "Silinen notlar",
+    exact: true,
+  });
+  await expect(
+    trash.locator(`[data-deleted-note="${saved.note_id}"]`),
+  ).toContainText("TrashOnly document");
+  await expect(
+    trash.locator(`[data-deleted-note="${saved.note_id}"]`),
+  ).toContainText("Silindi");
+  await expect(page.locator(".topic-transfer")).toHaveCount(0);
+  await page.locator(".search-trigger").click();
+  await page.getByRole("combobox", { name: "Arama" }).fill("TrashOnly");
+  await expect(
+    page.getByText("Sonuç bulunamadı.", { exact: false }),
+  ).toBeVisible();
+  await expect(page.locator("#search-results").getByRole("option")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Aramayı kapat", exact: true })
+    .click();
+  await page.setViewportSize({ width: 360, height: 800 });
+  await expect(trash).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({ path: screenshotDir + "/deleted-mobile.png" });
+  await page.getByRole("button", { name: "Notlara dön", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Not listesi", exact: true }),
+  ).toBeVisible();
+});
+
 test("open search removes deleted documents and entities without changing query", async ({
   page,
   request,

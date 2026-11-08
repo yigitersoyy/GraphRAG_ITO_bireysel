@@ -25,6 +25,7 @@ import {
   TopicPanel,
 } from "./Panels";
 import { Search } from "./Search";
+import { DeletedNotes } from "./DeletedNotes";
 import { dateLabel, ErrorMessage, Icon, IconButton, StateLabel } from "./ui";
 
 type View = "graph" | "list" | "topics";
@@ -48,6 +49,7 @@ export default function App() {
     [page, setPage] = useState<NotePage>(emptyPage),
     [topics, setTopics] = useState<Topic[]>([]);
   const [topicId, setTopicId] = useState(""),
+    [showDeleted, setShowDeleted] = useState(false),
     [q, setQ] = useState(""),
     [cursors, setCursors] = useState<(string | undefined)[]>([undefined]),
     [pageIndex, setPageIndex] = useState(0);
@@ -198,12 +200,20 @@ export default function App() {
   }, [selectedId, panel, source]);
 
   const filter = (topic: string, query = q) => {
+    setShowDeleted(false);
     setTopicId(topic);
     setQ(query);
     setCursors([undefined]);
     setPageIndex(0);
     setMapCursors([undefined]);
     setMapIndex(0);
+  };
+  const toggleDeleted = (value: boolean) => {
+    if (!leave()) return;
+    filter("", "");
+    setShowDeleted(value);
+    setPanel(null);
+    setClaims(null);
   };
   const openNote = (id: string, evidence: Evidence | null = null) => {
     if (!leave()) return;
@@ -224,6 +234,7 @@ export default function App() {
     }
   };
   const showGraph = async (scope: { note_id?: string; entity_id?: string }) => {
+    setShowDeleted(false);
     try {
       const result = await api.graph(scope);
       setClaims(result);
@@ -237,6 +248,7 @@ export default function App() {
   const selectSearch = (result: SearchResult) => {
     if (!leave()) return;
     setSearch(false);
+    setShowDeleted(false);
     if (result.kind === "note") openNote(result.id);
     else if (result.kind === "topic") {
       filter(result.id, "");
@@ -249,6 +261,7 @@ export default function App() {
   };
   const changeView = (next: View) => {
     if (leave()) {
+      setShowDeleted(false);
       if (panel === "edit" || panel === "create") setPanel(null);
       setView(next);
     }
@@ -705,122 +718,147 @@ export default function App() {
                 </label>
                 <select
                   id="topic-filter"
-                  value={topicId}
-                  onChange={(e) => filter(e.target.value)}
+                  value={showDeleted ? "__deleted__" : topicId}
+                  onChange={(e) => {
+                    if (e.target.value === "__deleted__") toggleDeleted(true);
+                    else filter(e.target.value);
+                  }}
                 >
                   <option value="">Tüm konular</option>
                   <option value="unsorted">Düzenlenmemiş</option>
+                  <option value="__deleted__">Silinenler</option>
                   {topics.map((t) => (
                     <option key={t.topic_id} value={t.topic_id}>
                       {t.name}
                     </option>
                   ))}
                 </select>
-                <span>{page.total} not</span>
-              </div>
-              <div
-                className="topic-transfer"
-                aria-label="Konu taşıma hedefleri"
-              >
-                <p>
-                  Notu bir konuya sürükle veya satırdaki konu seçimini kullan.
-                </p>
-                <div className="topic-drop-targets">
-                  {groups.map((t) => (
-                    <button
-                      key={t.topic_id}
-                      data-topic-drop={t.topic_id}
-                      className={
-                        "topic-drop" +
-                        (dropTopic === t.topic_id ? " drop-active" : "") +
-                        (topicId === t.topic_id ? " active" : "")
-                      }
-                      aria-label={`Konu: ${t.name}`}
-                      title="Notu buraya bırak; filtrelemek için tıkla"
-                      onClick={() => filter(t.topic_id)}
-                      onDragOver={(e) => {
-                        if (draggedNote.current && !moving.current) {
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = "move";
-                          setDropTopic(t.topic_id);
-                        }
-                      }}
-                      onDragLeave={(e) => {
-                        if (!e.currentTarget.contains(e.relatedTarget as Node))
-                          setDropTopic(null);
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const n = draggedNote.current;
-                        const id = e.dataTransfer.getData(
-                          "application/x-graphrag-note",
-                        );
-                        draggedNote.current = null;
-                        setDraggedId(null);
-                        setDropTopic(null);
-                        if (n && id === n.note_id) void moveNote(n, t.topic_id);
-                      }}
-                    >
-                      <span
-                        className="color-dot"
-                        style={{
-                          background: colors[t.color_key] || colors.gray,
-                        }}
-                      />
-                      {t.name}
-                      <small>{t.note_count}</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div
-                className="note-table"
-                role="region"
-                aria-label="Not listesi"
-              >
-                <div className="note-table-head">
-                  <span>Ad</span>
-                  <span>Konu</span>
-                  <span>Durum</span>
-                  <span>Eklenme</span>
-                </div>
-                {noteRows(page.items)}
-                {!page.items.length && !loading && (
-                  <div className="list-empty">
-                    Not bulunamadı.
-                    <button onClick={() => openPanel("create")}>
-                      Yeni not
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="pagination">
                 <span>
-                  {page.total
-                    ? `${pageIndex * 50 + 1}–${pageIndex * 50 + page.items.length} / ${page.total} not`
-                    : "0 not"}
+                  {showDeleted ? "Silinen belgeler" : `${page.total} not`}
                 </span>
-                <div>
-                  <button
-                    disabled={pageIndex === 0}
-                    onClick={() => setPageIndex((i) => i - 1)}
-                  >
-                    Önceki
-                  </button>
-                  <button
-                    disabled={!page.next_cursor}
-                    onClick={() => {
-                      setCursors((c) => [
-                        ...c.slice(0, pageIndex + 1),
-                        page.next_cursor!,
-                      ]);
-                      setPageIndex((i) => i + 1);
-                    }}
-                  >
-                    Sonraki
-                  </button>
-                </div>
+                <button
+                  className="text-button"
+                  aria-pressed={showDeleted}
+                  onClick={() => toggleDeleted(!showDeleted)}
+                >
+                  {showDeleted ? "Notlara dön" : "Silinenler"}
+                </button>
               </div>
+              {showDeleted ? (
+                <DeletedNotes
+                  revision={`${map?.graph_version ?? 0}:${map?.metadata_version ?? 0}`}
+                />
+              ) : (
+                <>
+                  <div
+                    className="topic-transfer"
+                    aria-label="Konu taşıma hedefleri"
+                  >
+                    <p>
+                      Notu bir konuya sürükle veya satırdaki konu seçimini
+                      kullan.
+                    </p>
+                    <div className="topic-drop-targets">
+                      {groups.map((t) => (
+                        <button
+                          key={t.topic_id}
+                          data-topic-drop={t.topic_id}
+                          className={
+                            "topic-drop" +
+                            (dropTopic === t.topic_id ? " drop-active" : "") +
+                            (topicId === t.topic_id ? " active" : "")
+                          }
+                          aria-label={`Konu: ${t.name}`}
+                          title="Notu buraya bırak; filtrelemek için tıkla"
+                          onClick={() => filter(t.topic_id)}
+                          onDragOver={(e) => {
+                            if (draggedNote.current && !moving.current) {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = "move";
+                              setDropTopic(t.topic_id);
+                            }
+                          }}
+                          onDragLeave={(e) => {
+                            if (
+                              !e.currentTarget.contains(e.relatedTarget as Node)
+                            )
+                              setDropTopic(null);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const n = draggedNote.current;
+                            const id = e.dataTransfer.getData(
+                              "application/x-graphrag-note",
+                            );
+                            draggedNote.current = null;
+                            setDraggedId(null);
+                            setDropTopic(null);
+                            if (n && id === n.note_id)
+                              void moveNote(n, t.topic_id);
+                          }}
+                        >
+                          <span
+                            className="color-dot"
+                            style={{
+                              background: colors[t.color_key] || colors.gray,
+                            }}
+                          />
+                          {t.name}
+                          <small>{t.note_count}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div
+                    className="note-table"
+                    role="region"
+                    aria-label="Not listesi"
+                  >
+                    <div className="note-table-head">
+                      <span>Ad</span>
+                      <span>Konu</span>
+                      <span>Durum</span>
+                      <span>Eklenme</span>
+                    </div>
+                    {noteRows(page.items)}
+                    {!page.items.length && !loading && (
+                      <div className="list-empty">
+                        Not bulunamadı.
+                        <button onClick={() => openPanel("create")}>
+                          Yeni not
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="pagination">
+                    <span>
+                      {page.total
+                        ? `${pageIndex * 50 + 1}–${pageIndex * 50 + page.items.length} / ${page.total} not`
+                        : "0 not"}
+                    </span>
+                    <div>
+                      <button
+                        disabled={pageIndex === 0}
+                        onClick={() => setPageIndex((i) => i - 1)}
+                      >
+                        Önceki
+                      </button>
+                      <button
+                        disabled={!page.next_cursor}
+                        onClick={() => {
+                          setCursors((c) => [
+                            ...c.slice(0, pageIndex + 1),
+                            page.next_cursor!,
+                          ]);
+                          setPageIndex((i) => i + 1);
+                        }}
+                      >
+                        Sonraki
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
           {view === "topics" && (
@@ -856,7 +894,7 @@ export default function App() {
               )}
             </div>
           )}
-          {view !== "graph" && claims && (
+          {view !== "graph" && !showDeleted && claims && (
             <ClaimsList
               graph={claims}
               onEvidence={(ev) => openNote(ev.note_id, ev)}

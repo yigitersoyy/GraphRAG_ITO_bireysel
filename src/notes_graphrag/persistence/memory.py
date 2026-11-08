@@ -199,6 +199,20 @@ class MemoryStore:
                 rows = [n for n in rows if (n.created_at, n.note_id) > after]
             return rows[:limit], len(rows) > limit
 
+    def deleted_notes(
+        self, after: tuple[datetime, str] | None, limit: int
+    ) -> tuple[list[Note], bool, int]:
+        with self.lock:
+            rows = sorted(
+                (n for n in self.notes.values() if n.deleted_at is not None),
+                key=lambda n: (n.deleted_at, n.note_id),
+                reverse=True,
+            )
+            total = len(rows)
+            if after is not None:
+                rows = [n for n in rows if n.deleted_at and (n.deleted_at, n.note_id) < after]
+            return rows[:limit], len(rows) > limit, total
+
     def delete_note(self, note_id: str, now: datetime) -> None:
         with self.lock:
             note = self._live_note(note_id)
