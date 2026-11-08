@@ -7,7 +7,8 @@ On this configured Windows machine, double-click **`BASLAT.cmd`** to prepare Doc
 local models and project services, then open the UI automatically. **`DURDUR.cmd`**
 stops this project's services while preserving notes. See [one-click usage](docs/windows.md).
 
-- Latest delivery: Qwen3.5-9B, up to 50 mixed files per selection, and circular graph nodes: [usage and validation](docs/QWEN35_TOPLU_YUKLEME_VE_GRAF.md).
+- Current implementation status and Python UI decision: [cleanup and migration results](docs/TEMIZLIK_VE_PYTHON_GECISI.md).
+- Qwen3.5-9B, up to 50 mixed files per selection, and circular graph nodes: [usage and validation](docs/QWEN35_TOPLU_YUKLEME_VE_GRAF.md).
 - Architecture and backlog: [MIMARI_VE_YAPILACAKLAR.md](docs/MIMARI_VE_YAPILACAKLAR.md).
 - Windows installation and lifecycle: [windows.md](docs/windows.md).
 - Upload PDF, Word (.docx), Excel (.xlsx/.xls), TXT and Markdown, with editable text preview: [document import](docs/BELGE_YUKLEME.md).
@@ -36,7 +37,7 @@ Open `http://localhost:8501`. This memory demo loses notes on exit. Stop it with
 start Docker Desktop and run `.\scripts\start.ps1 -Mode persistent-demo -Build` instead.
 Modes use separate Compose projects/volumes. Use different port options if running them together.
 
-The cross-platform equivalent after `uv sync --frozen --group dev --group ui` is
+The cross-platform equivalent after `uv sync --frozen --group dev` is
 `uv run python scripts/runtime.py start --mode demo`.
 
 For the manual Linux/container flow:
@@ -71,7 +72,7 @@ and valid citation offsets do not establish semantic answer quality.
 ## Local development without containers
 
 ```bash
-uv sync --group dev --group ui
+uv sync --group dev
 uv run ruff check . && uv run ruff format --check . && uv run mypy
 uv run pytest                    # unit + in-memory contract tests; Neo4j tests skip without env
 ```
@@ -106,7 +107,6 @@ src/notes_graphrag/
   retrieval/      lexical/vector candidates, RRF, bounded graph expansion, evidence packing
   answering/      structured answers, citation validation, rendering
 migrations/       versioned Cypher (checksummed; applied once)
-ui/               Streamlit: Notes, Ask, Graph, System (talks only to the API)
 frontend/         main React/TypeScript workspace, Cytoscape + local Canvas cluster outlines
 evaluation/       small labelled set and runner (demo results are not model quality)
 scripts/          smoke test, LM Studio probe, backup/restore, wheelhouse, evaluation
@@ -115,7 +115,7 @@ scripts/          smoke test, LM Studio probe, backup/restore, wheelhouse, evalu
 ## Historical verification (6 November 2026)
 
 - 215 tests pass against Neo4j 5.26.32 Community: unit tests, one contract suite run against both the
-  memory store and Neo4j, an HTTP case matrix on both stores, Streamlit flows, the LM Studio contract
+  memory store and Neo4j, an HTTP case matrix on both stores, browser UI flows, the LM Studio contract
   over real sockets (against a simulator), and Neo4j integration tests.
 - A fault-injection run against the Compose stack passes 28 of 28 checks: provider timeouts and slot
   recovery, rejected tokens, a worker crash with lease reclaim, a database restart during traffic,
@@ -127,7 +127,9 @@ scripts/          smoke test, LM Studio probe, backup/restore, wheelhouse, evalu
 The approved UI is now implemented in `frontend/`. The `ui` Docker target serves its compiled
 assets through Nginx on 8501, proxying `/api` and `/health` to the API on the same origin.
 Native demos use `scripts/frontend_server.py` for the same static/proxy arrangement.
-The former Streamlit sources remain in `ui/`, with the optional `legacy-ui` Docker target.
+The former Streamlit UI and its Docker target have been retired. React is the single
+supported UI: the isolated NiceGUI prototype did not meet the agreed initial graph
+load budget. The comparison and rollback evidence are recorded in the current status document.
 Migration 005 adds topics and metadata lookup; it preserves existing notes and revisions.
 See [the delivery report](docs/TESLIM_RAPORU.md) for current test results and [the UI slice report](docs/ARAYUZ_UYGULAMA_RAPORU.md) for the earlier interface checks.
 

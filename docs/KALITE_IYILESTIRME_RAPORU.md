@@ -1,5 +1,9 @@
 # Kaynak ve model kalitesi — 7 Kasım 2026
 
+> Dönemsel tasarım/teslim kaydıdır. Güncel mimari, testler ve kullanım durumu:
+> [Temizlik ve Python UI kararı](TEMIZLIK_VE_PYTHON_GECISI.md). Eski durum sayıları
+> ve model ölçümleri güncel veritabanının veya model kalitesinin garantisi değildir.
+
 Ana planın D devamı kapsamında kaynak zinciri, belirsizlik etiketleri, konu dışı cevapta çekimserlik ve güvenli yeniden işleme ele alındı. Genel model kalitesi henüz onaylanmadı. Arayüz tasarımı değiştirilmedi.
 
 ## Uygulanan değişiklikler

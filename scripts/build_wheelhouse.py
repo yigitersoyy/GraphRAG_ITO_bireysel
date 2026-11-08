@@ -28,48 +28,48 @@ def main() -> int:
     wheels.mkdir(parents=True, exist_ok=True)
     for app_wheel in wheels.glob("notes_graphrag-*.whl"):
         app_wheel.unlink()
-    for filename, groups in (("requirements.lock.txt", ["--no-dev"]),):
-        subprocess.run(
-            [uv, "export", "--frozen", "--no-hashes", "--no-emit-project", *groups, "-o", filename],
-            cwd=ROOT,
-            check=True,
-            stdout=subprocess.DEVNULL,
-        )
-        subprocess.run(
-            [
-                uv,
-                "tool",
-                "run",
-                "--python",
-                "3.12",
-                "--from",
-                "pip==25.0.1",
-                "pip",
-                "download",
-                "--quiet",
-                "-r",
-                filename,
-                "-d",
-                str(wheels),
-                "--only-binary=:all:",
-                "--python-version",
-                "3.12",
-                "--implementation",
-                "cp",
-                "--abi",
-                "cp312",
-                "--platform",
-                "manylinux_2_28_x86_64",
-                "--platform",
-                "manylinux_2_17_x86_64",
-                "--platform",
-                "manylinux2014_x86_64",
-                "--platform",
-                "any",
-            ],
-            cwd=ROOT,
-            check=True,
-        )
+    filename = "requirements.lock.txt"
+    subprocess.run(
+        [uv, "export", "--frozen", "--no-hashes", "--no-emit-project", "--no-dev", "-o", filename],
+        cwd=ROOT,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        [
+            uv,
+            "tool",
+            "run",
+            "--python",
+            "3.12",
+            "--from",
+            "pip==25.0.1",
+            "pip",
+            "download",
+            "--quiet",
+            "-r",
+            filename,
+            "-d",
+            str(wheels),
+            "--only-binary=:all:",
+            "--python-version",
+            "3.12",
+            "--implementation",
+            "cp",
+            "--abi",
+            "cp312",
+            "--platform",
+            "manylinux_2_28_x86_64",
+            "--platform",
+            "manylinux_2_17_x86_64",
+            "--platform",
+            "manylinux2014_x86_64",
+            "--platform",
+            "any",
+        ],
+        cwd=ROOT,
+        check=True,
+    )
     subprocess.run([uv, "build", "--wheel", "-o", str(wheels)], cwd=ROOT, check=True)
     print(f"wheelhouse ready: {len(list(wheels.glob('*.whl')))} wheels")
     return 0

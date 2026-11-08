@@ -1,5 +1,9 @@
 # GraphRAG arayüz tasarımı — referans uyarlaması
 
+> Dönemsel tasarım/teslim kaydıdır. Güncel mimari, testler ve kullanım durumu:
+> [Temizlik ve Python UI kararı](TEMIZLIK_VE_PYTHON_GECISI.md). Eski durum sayıları
+> ve model ölçümleri güncel veritabanının veya model kalitesinin garantisi değildir.
+
 Tarih: 7 Kasım 2026  
 Durum: **Kullanıcının “uygula” talimatıyla ilk dilim uygulandı.** Bu belge tasarım gerekçesini ve hedef akışları korur; gerçekleşen kapsam ve doğrulama [uygulama raporundadır](ARAYUZ_UYGULAMA_RAPORU.md).
 

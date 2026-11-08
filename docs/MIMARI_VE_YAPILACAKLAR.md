@@ -1,5 +1,15 @@
 # GraphRAG — Eksikleri Tamamlama Mimarisi ve Yapılacaklar
 
+## M — Temizlik ve koşullu Python UI (tamamlandı)
+
+- [x] Streamlit, gereksiz bağımlılıklar, yinelenen yardımcılar ve boş canvas kaldırıldı.
+- [x] Yedek geri yükleme, kaynaklar, testler ve kullanıcı verisinin korunması doğrulandı.
+- [x] NiceGUI ayrı ortamda ölçüldü; açılış bütçesini geçemediği için React korundu.
+- [x] Docker backend wheelhouse, sağlık kontrolleri, CI ve güncel kullanım düzenlendi.
+
+[Güncel durum ve ölçümler](TEMIZLIK_VE_PYTHON_GECISI.md). Aşağıdaki eski aşamalar
+ve Streamlit alternatifine ait açıklamalar tarihsel karar kaydıdır.
+
 ### L — Qwen3.5, toplu yükleme ve referans graf (8 Kasım 2026)
 
 - [x] Son görünüm isteği: gri zemin, büyük ana/küçük bağlı düğümler; soru kaynaklarını renkli, diğerlerini sönük gösterme ve vurguyu temizleme.

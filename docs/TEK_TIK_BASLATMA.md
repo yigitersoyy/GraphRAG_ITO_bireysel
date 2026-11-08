@@ -1,5 +1,9 @@
 # Tek tık başlatma teslimi
 
+> Dönemsel tasarım/teslim kaydıdır. Güncel mimari, testler ve kullanım durumu:
+> [Temizlik ve Python UI kararı](TEMIZLIK_VE_PYTHON_GECISI.md). Eski durum sayıları
+> ve model ölçümleri güncel veritabanının veya model kalitesinin garantisi değildir.
+
 8 Kasım 2026. Windows'ta günlük kullanım için proje kökündeki **`BASLAT.cmd`**
 dosyasına çift tıklayın. Docker, LM Studio arka ucu, iki yerel model ve proje
 servisleri hazırlanır; hazır olunca tarayıcı açılır. **`DURDUR.cmd`** yalnızca

@@ -1,5 +1,9 @@
 # Arayüz öncesi uygulama ve doğrulama
 
+> Dönemsel tasarım/teslim kaydıdır. Güncel mimari, testler ve kullanım durumu:
+> [Temizlik ve Python UI kararı](TEMIZLIK_VE_PYTHON_GECISI.md). Eski durum sayıları
+> ve model ölçümleri güncel veritabanının veya model kalitesinin garantisi değildir.
+
 Tarih: 7 Kasım 2026  
 Kapsam: `MIMARI_VE_YAPILACAKLAR.md` içindeki A–D aşamaları ve bu değişikliklerin test/dokümantasyonu. **Bu rapor arayüz öncesi A–D doğrulamasının tarihsel kaydıdır. E sonradan onaylanıp uygulandı; güncel durum [UI uygulama raporundadır](ARAYUZ_UYGULAMA_RAPORU.md). G dış erişim bekler.**
 

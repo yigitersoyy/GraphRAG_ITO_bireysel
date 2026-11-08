@@ -1,5 +1,9 @@
 # Model kalitesi devamı — 8 Kasım 2026
 
+> Dönemsel tasarım/teslim kaydıdır. Güncel mimari, testler ve kullanım durumu:
+> [Temizlik ve Python UI kararı](TEMIZLIK_VE_PYTHON_GECISI.md). Eski durum sayıları
+> ve model ölçümleri güncel veritabanının veya model kalitesinin garantisi değildir.
+
 > Bu belge tarihsel geliştirme günlüğüdür; ara başarısızlıklar korunmuştur. Son durum ve tamamlanan kabul: [teslim raporu](TESLIM_RAPORU.md). Aşağıdaki açık iş ve sert model-ret açıklamaları ilgili ara sürümü anlatır.
 
 Bu çalışma, [önceki kalite raporundaki](KALITE_IYILESTIRME_RAPORU.md) açık D13/D14/D16 maddelerini sürdürür. Arayüz tasarımı değiştirilmedi. Sonuçlar bu belgenin doğrulama bölümüne kaydedilir; geliştirme denemeleri genel kalite onayı değildir.

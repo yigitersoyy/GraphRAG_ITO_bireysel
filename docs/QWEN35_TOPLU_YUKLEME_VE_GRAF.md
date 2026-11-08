@@ -1,5 +1,9 @@
 # Qwen3.5, toplu yükleme ve yeni graf
 
+> Dönemsel tasarım/teslim kaydıdır. Güncel mimari, testler ve kullanım durumu:
+> [Temizlik ve Python UI kararı](TEMIZLIK_VE_PYTHON_GECISI.md). Eski durum sayıları
+> ve model ölçümleri güncel veritabanının veya model kalitesinin garantisi değildir.
+
 8 Kasım 2026 teslimi. Canlı arayüz: http://localhost:28501. Açık sayfayı yenileyin.
 Sonraki açılışlarda kökteki `BASLAT.cmd` dosyasını kullanın.
 

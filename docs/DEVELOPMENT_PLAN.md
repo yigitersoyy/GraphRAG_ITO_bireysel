@@ -1,5 +1,9 @@
 # Development plan and status
 
+Current status: [cleanup and conditional Python UI result](TEMIZLIK_VE_PYTHON_GECISI.md).
+Streamlit is retired. The isolated NiceGUI prototype failed the agreed first-graph-load
+budget, so React remains the single supported UI. Older measurements below are historical.
+
 Source: the architecture document (Notes → Knowledge Graph). Phases follow its section 17.
 
 ## Local delivery (2026-11-08)
@@ -86,7 +90,7 @@ Next: agree on the user's UI design before phase E; implement pagination/status/
 | 4 Search | Vector and full-text indexes, active filter, RRF | Done (Neo4j indexes) | scoped candidate tests; Turkish case folding test |
 | 5 Graph retrieval | Entity linking, bounded expansion, evidence packing | Done | expansion limit tests; 2-hop contract test |
 | 6 Answers | Structured answers, citation validation, abstention, graph version | Live smoke and evaluation run; semantic limitations above | answer and citation tests |
-| 7 Interface | FastAPI + React workspace; legacy Streamlit retained | Approved first UI slice implemented | Workspace API cases on both stores; real-API Playwright; source-range tests |
+| 7 Interface | FastAPI + React workspace; single supported UI | Approved first UI slice implemented | Workspace API cases on both stores; real-API Playwright; source-range tests |
 | 8 Reliability | Inference gate, lease fencing, restart recovery, retention, backup | Live timeout and worker restart recovery verified | chaos run 28/28; mutation checks; measured backup and restore |
 | 9 Evaluation | Dataset, baselines, live smoke, operations guide | Live baseline and separate validation measured; quality not approved | `evaluation/`, `scripts/evaluate.py`, `docs/operations.md` |
 

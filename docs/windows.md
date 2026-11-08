@@ -1,6 +1,6 @@
 # Windows kurulumu ve çalışma modları
 
-Ana arayüz, onaylanan koyu graf tasarımını kullanan React çalışma alanıdır. Graf, sağ not paneli, liste/konular, Ctrl+K araması ve kaynaklı cevaplar aynı ekranda bulunur. Eski Streamlit kaynakları alternatif olarak korunur.
+Ana arayüz, onaylanan koyu graf tasarımını kullanan React çalışma alanıdır. Graf, sağ not paneli, liste/konular, Ctrl+K araması ve kaynaklı cevaplar aynı ekranda bulunur. Eski Streamlit kaldırıldı; React tek desteklenen arayüzdür. [Temizlik ve NiceGUI kararı](TEMIZLIK_VE_PYTHON_GECISI.md).
 
 ## Günlük kullanım — tek tık
 

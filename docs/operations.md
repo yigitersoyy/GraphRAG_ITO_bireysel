@@ -3,7 +3,7 @@
 ## Windows and 7 November 2026 update
 
 Use [windows.md](windows.md) for PowerShell setup, mode-specific start/stop, diagnostics,
-separate local/container addresses and offline API/UI builds. The current architecture/backlog
+separate local/container addresses and offline Python backend builds. The current architecture/backlog
 is [MIMARI_VE_YAPILACAKLAR.md](MIMARI_VE_YAPILACAKLAR.md); the earlier section-numbered design
 document referenced in older code is not included in this checkout.
 
@@ -11,7 +11,7 @@ Compose now includes a separate `ui` build target/service: the approved React wo
 built with Node and served by Nginx, with same-origin API proxying. Native demos use the
 Python static/proxy entry point. The lifecycle tool uses distinct
 `notes-graphrag-persistent-demo` and `notes-graphrag-live` projects/volumes.
-See [UI implementation](ARAYUZ_UYGULAMA_RAPORU.md). Streamlit is retained as an optional legacy target.
+See [UI implementation](ARAYUZ_UYGULAMA_RAPORU.md). The Streamlit target has been removed. React is the sole supported UI; see [the measured NiceGUI decision](TEMIZLIK_VE_PYTHON_GECISI.md).
 
 Real Qwen 2.5 7B / Nomic 768-dimensional probes have been exercised from the application
 container; the later selected local chat profile is Qwen3 8B with an explicit `/no_think`
@@ -58,7 +58,7 @@ curl --fail http://127.0.0.1:8000/health/ready
 The Python app stage is installed offline from locked wheels; the frontend build stage uses
 `npm ci` and `frontend/package-lock.json` and needs package registry access on its first build.
 All runtime browser assets are served locally. `scripts/build_wheelhouse.sh` exists because the Python image is built offline from the locked
-dependencies. The build container does not trust the sandbox TLS interception CA, so fetching
+backend-only dependencies in `wheelhouse/backend/`. The build container does not trust the sandbox TLS interception CA, so fetching
 packages inside the image failed. Building the wheelhouse on the host avoids that and makes the image
 build reproducible. Run the script again after any dependency or source change.
 
@@ -84,7 +84,15 @@ scripts/neo4j_backup.sh <neo4j-container> ./backups
 scripts/neo4j_restore.sh <target-container> ./backups
 ```
 
-Tested on 2026-11-06 against the final schema (migrations 1 to 4), with disposable data:
+Both shell commands delegate to `scripts/neo4j_archive.py`. Restore requires an empty,
+stopped target and never overwrites an existing database. Backup checks directory access
+before stopping the source; a failed dump restarts a previously running source.
+Use a new output directory for each backup.
+
+Cleanup verification (2026-11-08): a full dump restored into a separate empty volume
+matched all properties of 1,367 nodes and 1,630 relationships.
+
+Historical result: tested on 2026-11-06 against the final schema (migrations 1 to 4), with disposable data:
 
 - A marker node was written, then the database dumped to a 1.6 MB `neo4j.dump` in about 21 s,
   including the container restart.

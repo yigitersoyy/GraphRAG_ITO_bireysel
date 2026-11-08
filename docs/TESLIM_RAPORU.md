@@ -1,5 +1,9 @@
 # Yerel kullanım teslimi
 
+> Dönemsel tasarım/teslim kaydıdır. Güncel mimari, testler ve kullanım durumu:
+> [Temizlik ve Python UI kararı](TEMIZLIK_VE_PYTHON_GECISI.md). Eski durum sayıları
+> ve model ölçümleri güncel veritabanının veya model kalitesinin garantisi değildir.
+
 Son ek kapsam tamamlandı: **Qwen3.5-9B**, tek seçimde **50 karışık dosya** ve
 referansa göre açık zeminli dairesel graf. [Güncel kullanım ve kanıtlar](QWEN35_TOPLU_YUKLEME_VE_GRAF.md).
 Aşağıdaki eski model kalite ölçümleri yeni modelin genel doğruluğunu belgelemiyor.
