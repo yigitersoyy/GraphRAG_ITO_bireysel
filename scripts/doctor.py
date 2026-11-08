@@ -114,7 +114,7 @@ def main() -> int:
         occupied = sock.connect_ex(("127.0.0.1", args.ui_port)) == 0
     try:
         if not args.no_ui:
-            r = httpx.get(f"http://127.0.0.1:{args.ui_port}/_stcore/health", timeout=3)
+            r = httpx.get(f"http://127.0.0.1:{args.ui_port}/health/ui", timeout=3)
             add("ui", r.status_code == 200 and r.text.strip() == "ok", "UI health checked")
     except httpx.HTTPError:
         add(

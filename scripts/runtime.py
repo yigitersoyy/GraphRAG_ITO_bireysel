@@ -207,7 +207,7 @@ def _manage_locked(args: argparse.Namespace, metadata: Path) -> int:
                     f"http://127.0.0.1:{saved['api_port']}/api/v1/system/status", 8, worker=True
                 )
                 if saved.get("ui_port"):
-                    wait_http(f"http://127.0.0.1:{saved['ui_port']}/_stcore/health", 8)
+                    wait_http(f"http://127.0.0.1:{saved['ui_port']}/health/ui", 8)
             except RuntimeError:
                 # Saved ownership survives a machine shutdown. Resume this project only.
                 env = environment(args.mode, args)
@@ -220,7 +220,7 @@ def _manage_locked(args: argparse.Namespace, metadata: Path) -> int:
             wait_http(f"http://127.0.0.1:{saved['api_port']}/health/ready", 8)
             wait_http(f"http://127.0.0.1:{saved['api_port']}/api/v1/system/status", 8, worker=True)
             if saved.get("ui_port"):
-                wait_http(f"http://127.0.0.1:{saved['ui_port']}/_stcore/health", 8)
+                wait_http(f"http://127.0.0.1:{saved['ui_port']}/health/ui", 8)
             print(f"Already running: http://localhost:{saved.get('ui_port') or saved['api_port']}")
             return 0
         stop_owned(saved.get("tokens", []))
@@ -268,7 +268,7 @@ def _manage_locked(args: argparse.Namespace, metadata: Path) -> int:
         start_persistent(args.mode, env, args.api_port, record["ui_port"])
     wait_http(f"http://127.0.0.1:{args.api_port}/api/v1/system/status", worker=True)
     if not args.no_ui:
-        wait_http(f"http://127.0.0.1:{args.ui_port}/_stcore/health")
+        wait_http(f"http://127.0.0.1:{args.ui_port}/health/ui")
     shown_port = args.api_port if args.no_ui else args.ui_port
     print(f"Started {args.mode}: http://localhost:{shown_port}")
     return 0
@@ -283,7 +283,7 @@ def start_persistent(mode: str, env: dict[str, str], api_port: int, ui_port: int
     wait_http(f"http://127.0.0.1:{api_port}/health/ready", 120)
     wait_http(f"http://127.0.0.1:{api_port}/api/v1/system/status", worker=True)
     if ui_port:
-        wait_http(f"http://127.0.0.1:{ui_port}/_stcore/health")
+        wait_http(f"http://127.0.0.1:{ui_port}/health/ui")
 
 
 def build_frontend() -> None:

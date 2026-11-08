@@ -6,6 +6,97 @@ const created: string[] = [],
   topics: { topic_id: string; version: number }[] = [];
 const screenshotDir = "../reports/frontend-e2e";
 
+test("failed-job retry control preserves API error handling", async ({
+  page,
+  request,
+}) => {
+  const note = await json(request, "/api/v1/notes", {
+    title: "Retry control",
+    text: "Ada works on Project Atlas.",
+  });
+  created.push(note.note_id);
+  await page.route(`**/api/v1/notes/${note.note_id}`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.state = "failed";
+    body.job = {
+      ...body.job,
+      status: "FAILED",
+      error_code: "EXTRACTION_INVALID",
+    };
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Liste", exact: true }).click();
+  await page.getByRole("button", { name: "Sonraki", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Retry control", exact: false })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Yeniden dene", exact: true }),
+  ).toBeVisible();
+  await page.route("**/api/v1/jobs/*/retry", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { error: { code: "API_UNREACHABLE", message: "Unavailable" } },
+    }),
+  );
+  const sent = page.waitForRequest(
+    (r) => r.url().includes("/retry") && r.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Yeniden dene", exact: true }).click();
+  await sent;
+  await expect(page.getByRole("alert")).toContainText("API");
+  await request.delete(`/api/v1/notes/${note.note_id}`);
+});
+
+test("safe hostile title, corrected form and insufficient answer retain legacy coverage", async ({
+  page,
+  request,
+}) => {
+  const title = "😀 <img src=x onerror=alert(1)> [click](javascript:alert(1))";
+  const dialogs: string[] = [];
+  page.on("dialog", async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.dismiss();
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Yeni not", exact: true }).click();
+  await page.getByLabel("Başlık", { exact: true }).fill(title);
+  await page.getByLabel("Metin", { exact: true }).fill("   ");
+  await page.getByRole("button", { name: "Kaydet", exact: true }).click();
+  await expect(
+    page.getByText("Not için bir başlık ve metin yaz.", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Metin", { exact: true })
+    .fill("Ada works on Project Atlas. Project Atlas uses Neo4j.");
+  await page.getByRole("button", { name: "Kaydet", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: title, exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".detail-panel img")).toHaveCount(0);
+  const notes = (
+    await json(
+      request,
+      "/api/v1/workspace/notes?q=" + encodeURIComponent(title),
+    )
+  ).items;
+  expect(notes).toHaveLength(1);
+  created.push(notes[0].note_id);
+  await page.getByRole("button", { name: "Soru sor", exact: true }).click();
+  await page
+    .getByLabel("Sorun", { exact: true })
+    .fill("What is the capital of France?");
+  await page.getByRole("button", { name: "Sor", exact: true }).click();
+  await expect(page.locator(".answer-result .field-label")).toHaveText(
+    "Yeterli kaynak yok",
+  );
+  await expect(page.locator(".source-button")).toHaveCount(0);
+  expect(dialogs).toEqual([]);
+  await request.delete(`/api/v1/notes/${notes[0].note_id}`);
+});
+
 test("multiple successful files finish with a note view and clean close", async ({
   page,
   request,
@@ -682,6 +773,7 @@ test("300 note and 600 edge map budget remains interactive", async ({
     ),
   );
   expect(frames.samples).toBeGreaterThan(1);
+  expect(frames.p95_frame_ms).toBeLessThanOrEqual(50);
   await page.getByRole("button", { name: "Haritayı ekrana sığdır" }).click();
   await page.screenshot({ path: screenshotDir + "/08-budget-map.png" });
 });

@@ -666,7 +666,7 @@ export function AskPanel({
           autoFocus
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          maxLength={10000}
+          maxLength={2000}
           placeholder="Notlarına bir soru sor…"
           disabled={loading}
         />

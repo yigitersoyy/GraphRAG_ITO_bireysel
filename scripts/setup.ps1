@@ -18,7 +18,7 @@ else {
     }
 }
 if (-not $SkipSync) {
-    & $uvPath sync --frozen --python 3.12 --group dev --group ui
+    & $uvPath sync --frozen --python 3.12 --group dev
     if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
 }
 if (-not (Test-Path -LiteralPath .env)) {

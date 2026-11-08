@@ -66,12 +66,10 @@ const caption = (text: string) => {
 };
 const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
   const host = useRef<HTMLDivElement>(null),
-    canvas = useRef<HTMLCanvasElement>(null),
     cyRef = useRef<Core | null>(null);
   const latest = useRef(props);
   latest.current = props;
   const positions = useRef(new Map<string, Point>()),
-    frame = useRef(0),
     firstFit = useRef(false);
   const structure = useRef("");
   const [seriesCount, setSeriesCount] = useState(0);
@@ -100,33 +98,9 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
     x: number;
     y: number;
   } | null>(null);
-  const draw = () => {
-    if (frame.current) return;
-    frame.current = requestAnimationFrame(() => {
-      frame.current = 0;
-      const cy = cyRef.current,
-        el = canvas.current,
-        holder = host.current;
-      if (!cy || !el || !holder) return;
-      const box = holder.getBoundingClientRect(),
-        dpr = Math.min(devicePixelRatio || 1, 2);
-      if (
-        el.width !== Math.round(box.width * dpr) ||
-        el.height !== Math.round(box.height * dpr)
-      ) {
-        el.width = Math.round(box.width * dpr);
-        el.height = Math.round(box.height * dpr);
-      }
-      const ctx = el.getContext("2d");
-      if (!ctx) return;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, box.width, box.height);
-    });
-  };
   useImperativeHandle(ref, () => ({
     fit: () => {
       cyRef.current?.fit(undefined, 90);
-      draw();
     },
     focus: (id) => {
       pendingFocus.current = id;
@@ -371,15 +345,12 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
         positions.current.set(n.id(), { ...n.position() });
       });
     });
-    cy.on("pan zoom render position", draw);
     const observer = new ResizeObserver(() => {
       cy.resize();
-      draw();
     });
     observer.observe(host.current);
     return () => {
       observer.disconnect();
-      cancelAnimationFrame(frame.current);
       cy.destroy();
       cyRef.current = null;
     };
@@ -726,10 +697,8 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
         cy.resize();
         if (saved) cy.viewport(saved);
         else cy.fit(undefined, 85);
-        draw();
       });
     }
-    draw();
   }, [
     props.map,
     props.claims,
@@ -744,7 +713,6 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
       requestAnimationFrame(() => {
         cyRef.current?.resize();
         applyFocus();
-        draw();
       });
     }
   }, [props.visible]);
@@ -759,7 +727,6 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
       data-highlighted-nodes={props.answerFocus ? focusCounts.highlighted : 0}
       data-dimmed-nodes={props.answerFocus ? focusCounts.dimmed : 0}
     >
-      <canvas ref={canvas} className="cluster-canvas" aria-hidden="true" />
       <div ref={host} className="graph-canvas" aria-hidden="true" />
       <div className="graph-types" aria-label="Düğüm türleri">
         <span className="sr-only" aria-label="Graf özeti">

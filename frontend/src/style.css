@@ -439,15 +439,11 @@
     position: relative;
   }
   .graph-stage,
-  .graph-canvas,
-  .cluster-canvas {
+  .graph-canvas {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-  }
-  .cluster-canvas {
-    pointer-events: none;
   }
   .graph-canvas {
     cursor: grab;

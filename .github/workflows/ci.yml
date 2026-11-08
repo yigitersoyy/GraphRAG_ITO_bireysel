@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync --frozen --group dev --group ui
+      - run: uv sync --frozen --group dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
@@ -51,7 +51,7 @@ jobs:
       - name: Install using the PowerShell setup entry point
         shell: powershell
         run: .\scripts\setup.ps1
-      - name: Unit, memory contract, UI and simulator tests
+      - name: Unit, memory contract and simulator tests
         run: uv run pytest -q --basetemp reports/ci-pytest
       - name: Windows service lifecycle and HTTP smoke
         run: uv run python scripts/verify_runtime.py
@@ -76,10 +76,17 @@ jobs:
       - run: uv run python scripts/runtime.py start --mode demo --api-port 18001 --ui-port 18502
       - run: npm run test:e2e
         working-directory: frontend
+      - name: Three-run graph performance baseline
+        run: npm run benchmark
+        working-directory: frontend
+        env:
+          BENCHMARK_API_URL: http://127.0.0.1:18001
       - run: uv run python scripts/runtime.py stop --mode demo
         if: always()
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: frontend-verification
-          path: reports/frontend-e2e/
+          path: |
+            reports/frontend-e2e/
+            reports/ui-benchmark/

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run src",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "benchmark": "node e2e/benchmark.cjs"
   },
   "dependencies": {
     "cytoscape": "3.34.4",

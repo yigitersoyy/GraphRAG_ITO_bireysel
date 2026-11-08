@@ -1,4 +1,4 @@
-"""Prepare locked Linux/Python 3.12 API and UI wheels from Windows or Linux."""
+"""Prepare locked Linux/Python 3.12 backend wheels from Windows or Linux."""
 
 from __future__ import annotations
 
@@ -23,14 +23,12 @@ def uv_command() -> str:
 
 def main() -> int:
     uv = uv_command()
-    wheels = ROOT / "wheelhouse"
-    wheels.mkdir(exist_ok=True)
+    # A dedicated runtime directory prevents old Streamlit/dev wheels entering Docker layers.
+    wheels = ROOT / "wheelhouse" / "backend"
+    wheels.mkdir(parents=True, exist_ok=True)
     for app_wheel in wheels.glob("notes_graphrag-*.whl"):
         app_wheel.unlink()
-    for filename, groups in (
-        ("requirements.lock.txt", ["--no-dev", "--no-group", "ui"]),
-        ("requirements.ui.lock.txt", ["--only-group", "ui"]),
-    ):
+    for filename, groups in (("requirements.lock.txt", ["--no-dev"]),):
         subprocess.run(
             [uv, "export", "--frozen", "--no-hashes", "--no-emit-project", *groups, "-o", filename],
             cwd=ROOT,
