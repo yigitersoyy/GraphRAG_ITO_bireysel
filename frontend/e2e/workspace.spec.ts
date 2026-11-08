@@ -42,6 +42,95 @@ test("constellation display controls preserve the graph while changing labels an
     .check();
 });
 
+test("node dragging animates the network and zoom keeps labels small", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator(".graph-legend button")).toHaveCount(7);
+  const initial = await page.evaluate(() => {
+    const host = document.querySelector(".graph-canvas") as HTMLElement & {
+      _cyreg: { cy: import("cytoscape").Core };
+    };
+    const cy = host._cyreg.cy;
+    const bounds = host.getBoundingClientRect();
+    const node = cy
+      .nodes()
+      .filter((n) => {
+        const p = n.renderedPosition();
+        return (
+          p.x > 230 &&
+          p.x < bounds.width - 180 &&
+          p.y > 130 &&
+          p.y < bounds.height - 130
+        );
+      })
+      .sort((a, b) => b.degree() - a.degree())
+      .first();
+    if (!node.length) throw new Error("No draggable graph node in viewport");
+    const p = node.renderedPosition();
+    return {
+      id: node.id(),
+      x: p.x + bounds.x,
+      y: p.y + bounds.y,
+      positions: cy.nodes().map((n) => ({ id: n.id(), ...n.position() })),
+      zoom: cy.zoom(),
+      pan: { ...cy.pan() },
+    };
+  });
+  await page.mouse.move(initial.x, initial.y);
+  await page.mouse.down();
+  try {
+    await page.mouse.move(initial.x + 100, initial.y + 35, { steps: 24 });
+    await expect
+      .poll(async () =>
+        page.evaluate((before) => {
+          const cy = (
+            document.querySelector(".graph-canvas") as HTMLElement & {
+              _cyreg: { cy: import("cytoscape").Core };
+            }
+          )._cyreg.cy;
+          return before.positions.filter(
+            (n) =>
+              n.id !== before.id &&
+              Math.hypot(
+                cy.$id(n.id).position().x - n.x,
+                cy.$id(n.id).position().y - n.y,
+              ) > 1,
+          ).length;
+        }, initial),
+      )
+      .toBeGreaterThan(3);
+  } finally {
+    await page.mouse.up();
+  }
+  const zoomed = await page.evaluate(() => {
+    const cy = (
+      document.querySelector(".graph-canvas") as HTMLElement & {
+        _cyreg: { cy: import("cytoscape").Core };
+      }
+    )._cyreg.cy;
+    const camera = { pan: { ...cy.pan() }, zoom: cy.zoom() };
+    cy.zoom(8);
+    const fonts = {
+      node: Math.max(
+        ...cy.nodes().map((n) => parseFloat(n.renderedStyle("font-size"))),
+      ),
+      edge: Math.max(
+        ...cy.edges().map((e) => parseFloat(e.renderedStyle("font-size"))),
+      ),
+    };
+    cy.viewport(camera);
+    return { ...fonts, camera };
+  });
+  expect(zoomed.node).toBeLessThanOrEqual(11.1);
+  expect(zoomed.edge).toBeLessThanOrEqual(9.1);
+  expect(zoomed.camera).toEqual({ zoom: initial.zoom, pan: initial.pan });
+  await page.locator("summary").filter({ hasText: "Görünüm" }).click();
+  await page
+    .getByRole("checkbox", { name: "Yaylı hareket", exact: true })
+    .uncheck();
+});
+
 test("deleted documents appear only in Deleted, with mobile list access", async ({
   page,
   request,

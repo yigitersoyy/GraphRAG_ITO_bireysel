@@ -166,6 +166,17 @@ bu bağımsız bir cihazlar arası performans karşılaştırması değildir. Ca
 salt okunur tarayıcı kontrolüyle doğrulandı. Yalnızca Docker UI servisi yenilendi;
 API/worker, model, veri ve şema değiştirilmedi.
 
+Son görünüm düzeltmesinde bileşen içi uzaklıklar ve bileşenler arasındaki boşluklar
+azaltıldı. Düğüm etiketleri yakınlaştırmada en fazla 11, bağlantı etiketleri 9 ekran
+pikselinde tutulur. Bir düğüm sürüklendiğinde tüm graf yay etkisiyle tepki verir;
+komşular daha güçlü, uzak ve bağlantısız düğümler daha hafif hareket eder.
+Bırakıldıktan sonra hareket sönümlenir; kamera değiştirilmez. Görünüm → Yaylı hareket
+ile kapatılabilir. İşletim sisteminin azaltılmış hareket tercihi animasyonu kaldırır.
+Animasyon tarayıcıda çalışır, yeni bağlantı oluşturmaz ve API'ye konum yazmaz.
+15 tarayıcı ve 8 birim testi geçti; 300 not/600 bağlantı pan kontrolünde yerel p95
+8,2 ms ölçüldü. Animasyonun durması, temizlenmesi, kopuk düğümlerin tepkisi ve
+8× yakınlaştırmada etiket sınırı ayrıca doğrulandı.
+
 ## NiceGUI kabul kapısı (geçiş değerlendirmesinin tarihsel ölçütleri)
 
 1440×960 ve 360×800 görünüm; siyah zemin, ana/alt düğüm boyutu ve kaynak vurgusu;

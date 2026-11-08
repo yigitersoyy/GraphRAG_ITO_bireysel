@@ -146,37 +146,70 @@ export function fitOverview(cy: Core) {
     });
 }
 
+// Cytoscape scales canvas text with the camera. Keep labels readable in screen
+// pixels instead of letting an 8× zoom turn them into oversized headings.
+export function scaleLabels(cy: Core) {
+  const zoom = cy.zoom();
+  cy.batch(() => {
+    cy.nodes().style({
+      "font-size": Math.min(9, 11 / zoom),
+      "text-max-width": 145 / zoom,
+      "text-margin-y": 4 / zoom,
+      "text-background-padding": 2 / zoom,
+    });
+    cy.edges().style({
+      "font-size": Math.min(8, 9 / zoom),
+      "text-background-padding": 2 / zoom,
+    });
+  });
+}
+
 // Pack genuine disconnected components into a cloud, without inventing connecting edges.
 export function packComponents(cy: Core) {
   const groups = cy
     .elements()
     .components()
     .sort((a, b) => b.nodes().length - a.nodes().length);
-  if (groups.length < 2) return;
   const placed: { x: number; y: number; r: number }[] = [];
   groups.forEach((group) => {
+    const nodes = group.nodes();
+    const center = nodes.reduce(
+      (sum, n) => ({
+        x: sum.x + n.position().x / nodes.length,
+        y: sum.y + n.position().y / nodes.length,
+      }),
+      { x: 0, y: 0 },
+    );
+    nodes.positions((n) => ({
+      x: center.x + (n.position().x - center.x) * 0.72,
+      y: center.y + (n.position().y - center.y) * 0.72,
+    }));
     const box = group
       .nodes()
       .boundingBox({ includeLabels: false, includeOverlays: false });
-    const r = Math.max(8, Math.hypot(box.w, box.h) / 2 + 12);
-    let center = { x: 0, y: 0 };
+    const r = Math.max(7, Math.hypot(box.w, box.h) / 2 + 4);
+    let destination = { x: 0, y: 0 };
     if (placed.length)
       for (let i = 1; i < 6000; i++) {
         const angle = i * 2.399963,
-          radius = Math.sqrt(i) * 24;
-        center = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+          radius = Math.sqrt(i) * 10;
+        destination = {
+          x: Math.cos(angle) * radius,
+          y: Math.sin(angle) * radius,
+        };
         if (
           placed.every(
-            (p) => Math.hypot(p.x - center.x, p.y - center.y) >= p.r + r,
+            (p) =>
+              Math.hypot(p.x - destination.x, p.y - destination.y) >= p.r + r,
           )
         )
           break;
       }
-    const dx = center.x - (box.x1 + box.x2) / 2,
-      dy = center.y - (box.y1 + box.y2) / 2;
+    const dx = destination.x - (box.x1 + box.x2) / 2,
+      dy = destination.y - (box.y1 + box.y2) / 2;
     group
       .nodes()
       .positions((n) => ({ x: n.position().x + dx, y: n.position().y + dy }));
-    placed.push({ ...center, r });
+    placed.push({ ...destination, r });
   });
 }

@@ -15,12 +15,14 @@ import type {
   SharedEdge,
 } from "./types";
 import { applyAnswerFocus, nodeSize } from "./graphFocus";
+import { createGraphMotion } from "./graphMotion";
 import {
   graphPalette,
   graphStyle,
   pointColor,
   fitOverview,
   packComponents,
+  scaleLabels,
 } from "./graphTheme";
 
 export const colors: Record<string, string> = {
@@ -90,11 +92,16 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
   const [showArrows, setShowArrows] = useState(false);
   const [nodeScale, setNodeScale] = useState(1);
   const [lineOpacity, setLineOpacity] = useState(0.24);
+  const [motionEnabled, setMotionEnabled] = useState(true);
+  const motion = useRef<ReturnType<typeof createGraphMotion> | null>(null);
+  const motionSetting = useRef(true);
+  motionSetting.current = motionEnabled;
   const display = useRef({ labels: false, arrows: false });
   display.current = { labels: showLabels, arrows: showArrows };
   const syncDisplay = () => {
     const cy = cyRef.current;
     if (!cy) return;
+    scaleLabels(cy);
     cy.batch(() => {
       cy.elements().toggleClass(
         "labels-visible",
@@ -214,29 +221,15 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
       setTooltip(null);
       if (host.current) host.current.style.cursor = "grab";
     });
-    let previous: Point | null = null;
-    cy.on("grab", 'node[kind = "topic"]', (e) => {
-      previous = { ...e.target.position() };
-    });
-    cy.on("drag", 'node[kind = "topic"]', (e) => {
-      const n = e.target;
-      const p = n.position();
-      if (previous) {
-        const dx = p.x - previous.x,
-          dy = p.y - previous.y;
-        cy.nodes('[kind = "note"]')
-          .filter((v) => v.data("topicId") === n.id())
-          .forEach((v) => {
-            const old = v.position();
-            v.position({ x: old.x + dx, y: old.y + dy });
-          });
-      }
-      previous = { ...p };
-    });
-    cy.on("dragfree", "node", () => {
-      cy.nodes().forEach((n) => {
-        positions.current.set(n.id(), { ...n.position() });
-      });
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    motion.current = createGraphMotion(cy, {
+      enabled: () => motionSetting.current && latest.current.visible,
+      reducedMotion: () => reducedMotion.matches,
+      onSettle: () => {
+        cy.nodes().forEach((n) => {
+          positions.current.set(n.id(), { ...n.position() });
+        });
+      },
     });
     const observer = new ResizeObserver(() => {
       cy.resize();
@@ -244,6 +237,8 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
     observer.observe(host.current);
     return () => {
       observer.disconnect();
+      motion.current?.dispose();
+      motion.current = null;
       cy.destroy();
       cyRef.current = null;
     };
@@ -568,17 +563,18 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
       !cy.nodes().some((n) => (n as NodeSingular).grabbed())
     ) {
       structure.current = signature;
+      motion.current?.stop();
       cy.layout({
         name: "cose",
         animate: false,
         fit: false,
         randomize: false,
-        nodeRepulsion: () => 1600,
-        idealEdgeLength: () => 34,
-        nodeOverlap: 5,
+        nodeRepulsion: () => 650,
+        idealEdgeLength: () => 24,
+        nodeOverlap: 3,
         numIter: 450,
-        gravity: 0.65,
-        componentSpacing: 36,
+        gravity: 1.1,
+        componentSpacing: 10,
       }).run();
       packComponents(cy);
       cy.nodes().forEach((n) => {
@@ -657,6 +653,14 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
               onChange={(e) => setShowLabels(e.target.checked)}
             />
             Düğüm adları
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={motionEnabled}
+              onChange={(e) => setMotionEnabled(e.target.checked)}
+            />
+            Yaylı hareket
           </label>
           <label>
             <input
