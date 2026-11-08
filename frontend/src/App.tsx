@@ -1021,6 +1021,7 @@ export default function App() {
       </main>
       {search && (
         <Search
+          revision={`${map?.graph_version ?? 0}:${map?.metadata_version ?? 0}`}
           onClose={() => setSearch(false)}
           onSelect={selectSearch}
           onCreate={() => {

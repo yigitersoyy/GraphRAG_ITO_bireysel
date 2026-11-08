@@ -4,11 +4,13 @@ import type { SearchResult } from "./types";
 import { ErrorMessage, Icon, IconButton } from "./ui";
 
 export function Search({
+  revision,
   onClose,
   onSelect,
   onList,
   onCreate,
 }: {
+  revision: string;
   onClose(): void;
   onSelect(result: SearchResult): void;
   onList(q: string): void;
@@ -33,6 +35,9 @@ export function Search({
     const abort = new AbortController();
     setIndex(0);
     setError("");
+    // A changed query or workspace invalidates every result, including in-flight requests.
+    setItems([]);
+    setLimited(false);
     if (!q.trim()) {
       setItems([]);
       setLoading(false);
@@ -62,7 +67,7 @@ export function Search({
       clearTimeout(timer);
       abort.abort();
     };
-  }, [q, kind]);
+  }, [q, kind, revision]);
   useEffect(() => {
     options.current[index]?.scrollIntoView({ block: "nearest" });
   }, [index]);

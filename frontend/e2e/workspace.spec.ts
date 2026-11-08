@@ -6,6 +6,41 @@ const created: string[] = [],
   topics: { topic_id: string; version: number }[] = [];
 const screenshotDir = "../reports/frontend-e2e";
 
+test("open search removes deleted documents and entities without changing query", async ({
+  page,
+  request,
+}) => {
+  const note = await json(request, "/api/v1/notes", {
+    title: "SearchGone deletion check",
+    text: "SearchGone works on Project SearchGone. Project SearchGone uses Neo4j.",
+  });
+  created.push(note.note_id);
+  await expect
+    .poll(
+      async () => (await json(request, "/api/v1/notes/" + note.note_id)).state,
+    )
+    .toBe("ready");
+  await page.goto("/");
+  await page.locator(".search-trigger").click();
+  const query = page.getByRole("combobox", { name: "Arama" });
+  await query.fill("SearchGone");
+  await expect(
+    page.getByRole("option").filter({ hasText: "SearchGone deletion check" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option").filter({ hasText: "Varlık" }),
+  ).not.toHaveCount(0);
+  await request.delete("/api/v1/notes/" + note.note_id);
+  expect((await json(request, "/api/v1/search?q=SearchGone")).items).toEqual(
+    [],
+  );
+  await expect(page.getByRole("option")).toHaveCount(0, { timeout: 8000 });
+  await expect(query).toHaveValue("SearchGone");
+  await expect(
+    page.getByText("Sonuç bulunamadı.", { exact: false }),
+  ).toBeVisible();
+});
+
 test("failed-job retry control preserves API error handling", async ({
   page,
   request,

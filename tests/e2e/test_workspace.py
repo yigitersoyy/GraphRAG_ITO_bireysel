@@ -90,6 +90,23 @@ def test_catalog_filters_before_pagination_and_scopes_the_cursor(stack):
     )
 
 
+def test_search_hides_deleted_notes_and_their_exclusive_entities_immediately(stack):
+    client = stack.client
+    note = stack.create(
+        "SearchGone deletion check",
+        "SearchGone works on Project SearchGone. Project SearchGone uses Neo4j.",
+        "search-delete",
+    ).json()
+    stack.drain()
+    before = client.get("/api/v1/search", params={"q": "SearchGone"}).json()["items"]
+    assert {"note", "entity"} <= {item["kind"] for item in before}
+    assert client.delete("/api/v1/notes/" + note["note_id"]).status_code == 204
+    for kind in ["all", "note", "entity"]:
+        result = client.get("/api/v1/search", params={"q": "SearchGone", "kind": kind})
+        assert result.status_code == 200
+        assert result.json()["items"] == []
+
+
 def test_map_and_search_only_use_active_ready_support(stack):
     a = stack.create("İş Planı", TEXT, "a").json()
     b = stack.create("Ekip", "Grace works on Project Atlas.", "b").json()

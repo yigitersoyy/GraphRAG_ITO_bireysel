@@ -99,6 +99,17 @@ Yerel raporlar: `reports/cleanup-full.xml`, `reports/frontend-e2e/`,
 
 ## Veri ve geri dönüş
 
+### Silme sonrası arama düzeltmesi
+
+Arama penceresi artık workspace graf/metadata sürümü değiştiğinde aynı sorguyu
+yeniden çalıştırır. Sorgu veya sürüm değişirken eski sonuçlar hemen temizlenir ve
+önceki istek iptal edilir. Böylece başka bir sekmede silinen not ve yalnızca ona
+dayanan varlıklar açık aramada kalmaz; mevcut workspace yenileme aralığı en fazla
+yaklaşık beş saniyedir. Aynı adlı iki ayrı aktif kayıt silinmiş kayıtla karıştırılmaz.
+Yeni regresyon önce eski UI'de üç sonucun kaldığını doğrulayarak başarısız oldu;
+düzeltmeden sonra geçti. İki tarayıcı kontrolü, memory/Neo4j üzerinde dört API
+kontrolü ve beş Vitest testi geçti. Canlı UI de silinen kayıt için sıfır sonuçla doğrulandı.
+
 `backups/cleanup-c7c8f04/` ve `reports/` yalnızca yerelde tutulur. Tam yedek,
 okunabilir dışa aktarımın yerine geçmediği gibi dışa aktarım da tam yedek değildir.
 Canlı Compose projesi ve volume adı değiştirilmez. Migration 001–005, mevcut
