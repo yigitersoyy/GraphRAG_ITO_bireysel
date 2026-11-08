@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import json
+import re
 import uuid
 from dataclasses import dataclass, field
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from notes_graphrag.domain.ontology import EntityKind, Modality, Polarity, predicate_allows
+from notes_graphrag.domain.ontology import (
+    PREDICATES,
+    EntityKind,
+    Modality,
+    Polarity,
+    predicate_allows,
+)
+from notes_graphrag.providers.schema import strict_schema
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION: Literal["1"] = "1"
 _NS = uuid.UUID("0b6e5a4c-7e0b-4f55-8c5e-3b4a1f2d9c21")
 
 
@@ -26,7 +36,14 @@ class Evidence(Span):
 class ExtractedEntity(BaseModel):
     model_config = ConfigDict(extra="forbid")
     local_id: str = Field(min_length=1, max_length=32)
-    name: str = Field(min_length=1, max_length=200)
+    name: str = Field(
+        min_length=1,
+        max_length=200,
+        description=(
+            "Full verbatim entity name. Keep Project/Proje and the following name together. "
+            "Do not include a preceding person name or a Turkish case suffix."
+        ),
+    )
     kind: EntityKind
     mentions: list[Span] = Field(default_factory=list, max_length=50)
 
@@ -34,19 +51,140 @@ class ExtractedEntity(BaseModel):
 class ExtractedClaim(BaseModel):
     model_config = ConfigDict(extra="forbid")
     subject_local_id: str
-    predicate: str
+    predicate: str = Field(json_schema_extra={"enum": list(PREDICATES)})
     object_local_id: str
-    polarity: Polarity = Polarity.POSITIVE
-    modality: Modality = Modality.ASSERTED
+    polarity: Polarity = Field(
+        default=Polarity.POSITIVE,
+        description=(
+            "POSITIVE unless the relationship itself is explicitly denied; "
+            "NEGATED for does not / değil / kullanmıyor. Future time is not negation."
+        ),
+    )
+    modality: Modality = Field(
+        default=Modality.ASSERTED,
+        description=(
+            "POSSIBLE for may/might/could or Turkish -ebilir/-abilir; "
+            "this overrides a future date. "
+            "PLANNED only for an explicitly committed/approved plan for THIS relationship. "
+            "REPORTED for an attributed report, otherwise ASSERTED."
+        ),
+    )
     evidence: Evidence
     temporal_text: str | None = Field(default=None, max_length=200)
 
 
 class ExtractionOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    schema_version: str = SCHEMA_VERSION
-    entities: list[ExtractedEntity] = Field(default_factory=list, max_length=100)
-    claims: list[ExtractedClaim] = Field(default_factory=list, max_length=200)
+    schema_version: Literal["1"] = SCHEMA_VERSION
+    entities: list[ExtractedEntity] = Field(default_factory=list, min_length=0, max_length=100)
+    claims: list[ExtractedClaim] = Field(default_factory=list, min_length=0, max_length=200)
+
+
+class WireRelation(BaseModel):
+    """Generate evidence and relationship before committing to entity boundaries/types."""
+
+    model_config = ConfigDict(extra="forbid")
+    quote: str = Field(min_length=1, max_length=2000)
+    predicate: str = Field(json_schema_extra={"enum": list(PREDICATES)})
+    modality: Modality = Field(
+        default=Modality.ASSERTED, description=ExtractedClaim.model_fields["modality"].description
+    )
+    polarity: Polarity = Field(
+        default=Polarity.POSITIVE, description=ExtractedClaim.model_fields["polarity"].description
+    )
+    subject: ExtractedEntity
+    object: ExtractedEntity
+    temporal_text: str | None = Field(default=None, max_length=200)
+
+
+class RelationOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    relations: list[WireRelation] = Field(min_length=0, max_length=200)
+
+
+def extraction_wire_schema() -> dict[str, object]:
+    """Relationship-first wire format; persisted extraction/claim schema stays version 1."""
+    schema = strict_schema(RelationOutput.model_json_schema())
+    fields = schema["properties"]["relations"]["items"]["properties"]
+    for role in ("subject", "object"):
+        entity = fields[role]
+        entity["properties"].pop("mentions")
+        entity["required"].remove("mentions")
+        entity["properties"] = {
+            key: entity["properties"][key] for key in ("local_id", "kind", "name")
+        }
+    return schema
+
+
+def _relations_to_internal(data: dict[str, Any]) -> dict[str, Any]:
+    out = RelationOutput.model_validate(data)
+    entities: dict[str, ExtractedEntity] = {}
+    claims = []
+    for relation in out.relations:
+        for entity in (relation.subject, relation.object):
+            previous = entities.get(entity.local_id)
+            if previous and (previous.name, previous.kind) != (entity.name, entity.kind):
+                raise ValueError("one local_id describes different entities")
+            entities[entity.local_id] = entity
+        claims.append(
+            {
+                "subject_local_id": relation.subject.local_id,
+                "predicate": relation.predicate,
+                "object_local_id": relation.object.local_id,
+                "polarity": relation.polarity.value,
+                "modality": relation.modality.value,
+                "evidence": {"quote": relation.quote},
+                "temporal_text": relation.temporal_text,
+            }
+        )
+    return {"entities": [e.model_dump(mode="json") for e in entities.values()], "claims": claims}
+
+
+def anchor_unique_evidence(raw_json: str, chunk_text: str) -> str:
+    """Derive offsets only for unique, verbatim source quotes; never guess ambiguous matches.
+
+    This does not relax validate_extraction: schema, ontology, identity and revision-global
+    offset checks still apply to its output.
+    """
+    try:
+        data = json.loads(raw_json)
+        if isinstance(data, dict) and "relations" in data:
+            data = _relations_to_internal(data)
+        if not isinstance(data, dict) or not isinstance(data.get("claims", []), list):
+            return raw_json
+        for claim in data.get("claims", []):
+            ev = claim.get("evidence") if isinstance(claim, dict) else None
+            if isinstance(ev, dict) and "start" not in ev and "end" not in ev:
+                quote = ev.get("quote")
+                if not isinstance(quote, str) or not quote:
+                    return raw_json
+                start = chunk_text.find(quote)
+                if start < 0 or chunk_text.find(quote, start + 1) != -1:
+                    return raw_json
+                ev.update(start=start, end=start + len(quote))
+        out = ExtractionOutput.model_validate(data)
+    except (ValueError, TypeError):
+        return raw_json
+    changed = data != json.loads(raw_json)
+    for entity in out.entities:
+        if len(entity.mentions) != 1:
+            continue
+        mention = entity.mentions[0]
+        if chunk_text[mention.start : mention.end] == entity.name:
+            continue
+        start = chunk_text.find(entity.name)
+        if start >= 0 and chunk_text.find(entity.name, start + 1) == -1:
+            mention.start, mention.end = start, start + len(entity.name)
+            changed = True
+    for claim in out.claims:
+        ev = claim.evidence
+        if chunk_text[ev.start : ev.end] == ev.quote:
+            continue
+        start = chunk_text.find(ev.quote)
+        if start >= 0 and chunk_text.find(ev.quote, start + 1) == -1:
+            ev.start, ev.end = start, start + len(ev.quote)
+            changed = True
+    return json.dumps(out.model_dump(mode="json"), ensure_ascii=False) if changed else raw_json
 
 
 @dataclass(frozen=True)
@@ -100,6 +238,16 @@ def validate_extraction(
     by_id = {e.local_id: e for e in out.entities}
 
     for e in out.entities:
+        if e.kind == EntityKind.PROJECT and not e.name.startswith(("Project ", "Proje ")):
+            matches = list(re.finditer(r"(?<!\w)" + re.escape(e.name) + r"(?!\w)", chunk_text))
+            prefixes = [re.search(r"\b(Project|Proje) $", chunk_text[: m.start()]) for m in matches]
+            if matches and all(prefixes):
+                full_names = {f"{p.group(1)} {e.name}" for p in prefixes if p}
+                if len(full_names) == 1:
+                    report.errors.append(
+                        f"entity {e.local_id}: truncated project name; "
+                        f"use {next(iter(full_names))!r}"
+                    )
         for m in e.mentions:
             if m.end > len(chunk_text) or m.start >= m.end:
                 report.errors.append(f"entity {e.local_id}: mention span out of range")

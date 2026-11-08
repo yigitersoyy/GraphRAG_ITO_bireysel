@@ -18,7 +18,7 @@ from typing import Any
 
 from notes_graphrag.core.errors import InferenceBusy, ProviderUnavailable
 from notes_graphrag.persistence.base import Store
-from notes_graphrag.persistence.models import GATE_IDLE, GATE_RECOVERING, PROBE_OWNER
+from notes_graphrag.persistence.models import GATE_BUSY, GATE_IDLE, GATE_RECOVERING, PROBE_OWNER
 
 log = logging.getLogger("notes_graphrag.gate")
 AMBIGUOUS_CODE = "PROVIDER_TIMEOUT"
@@ -48,6 +48,9 @@ class InferenceGate:
         self.probe = probe
         self.clock = clock
         self.poll = poll_seconds
+        self.wait_seconds_total = 0.0
+        self.calls_total = 0
+        self.metrics_lock = threading.Lock()
 
     def _probe_once(self) -> bool:
         assert self.probe is not None
@@ -71,8 +74,16 @@ class InferenceGate:
         """Probe a RECOVERING slot now, without waiting for a request. True if it cleared."""
         if self.probe is None:
             return False
-        if self.store.gate_status(self.endpoint_id).state != GATE_RECOVERING:
+        status = self.store.gate_status(self.endpoint_id)
+        expired = (
+            status.state == GATE_BUSY
+            and status.lease_expires_at is not None
+            and status.lease_expires_at <= self.clock()
+        )
+        if status.state != GATE_RECOVERING and not expired:
             return False
+        # The storage contract first fences an expired BUSY holder into RECOVERING.
+        # A later attempt probes it; no ordinary work is admitted by this transition.
         return self._probe_once()
 
     def _acquire(self, owner: str) -> str:
@@ -99,7 +110,13 @@ class InferenceGate:
 
     @contextmanager
     def slot(self, owner: str) -> Iterator[str]:
-        token = self._acquire(owner)
+        started = time.monotonic()
+        try:
+            token = self._acquire(owner)
+        finally:
+            with self.metrics_lock:
+                self.wait_seconds_total += time.monotonic() - started
+                self.calls_total += 1
         stop = threading.Event()
         beat = threading.Thread(target=self._beat, args=(token, stop), daemon=True)
         beat.start()

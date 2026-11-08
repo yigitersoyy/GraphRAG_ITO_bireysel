@@ -17,7 +17,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--api-base", default="http://127.0.0.1:8000")
     ap.add_argument("--timeout", type=float, default=120)
+    ap.add_argument("--language", choices=("en", "tr"), default="en")
     args = ap.parse_args()
+    note = (
+        NOTE
+        if args.language == "en"
+        else ("Ada, Project Atlas üzerinde çalışıyor. Project Atlas Neo4j kullanıyor.")
+    )
+    question = (
+        QUESTION if args.language == "en" else "Ada'nın projesi hangi veritabanını kullanıyor?"
+    )
     c = httpx.Client(base_url=args.api_base, timeout=args.timeout)
     run = uuid.uuid4().hex[:8]
     created: list[str] = []
@@ -27,10 +36,17 @@ def main() -> int:
         if not cond:
             raise AssertionError(msg)
 
+    def payload(response: httpx.Response) -> dict:
+        data = response.json()
+        if response.status_code >= 400:
+            code = data.get("error", {}).get("code", "HTTP_ERROR")
+            raise AssertionError(f"{response.request.method} {response.request.url.path}: {code}")
+        return data
+
     def wait(job_id: str) -> dict:
         deadline = time.monotonic() + args.timeout
         while time.monotonic() < deadline:
-            j = c.get(f"/api/v1/jobs/{job_id}").json()
+            j = payload(c.get(f"/api/v1/jobs/{job_id}"))
             if j["status"] in ("SUCCEEDED", "FAILED", "SUPERSEDED", "CANCELLED"):
                 return j
             time.sleep(0.3)
@@ -39,8 +55,8 @@ def main() -> int:
     try:
         check(c.get("/health/ready").status_code == 200, "readiness")
         key = f"smoke-{run}"
-        body = {"title": f"smoke {run}", "text": NOTE}
-        r = c.post("/api/v1/notes", json=body, headers={"Idempotency-Key": key}).json()
+        body = {"title": f"smoke {run}", "text": note}
+        r = payload(c.post("/api/v1/notes", json=body, headers={"Idempotency-Key": key}))
         created.append(r["note_id"])
         check(wait(r["job_id"])["status"] == "SUCCEEDED", "ingestion succeeded")
         st = c.get("/api/v1/system/status").json()
@@ -50,8 +66,13 @@ def main() -> int:
             again["job_id"] == r["job_id"] and again["note_id"] == r["note_id"], "idempotent replay"
         )
 
-        q = c.post("/api/v1/questions", json={"question": QUESTION, "include_graph": True}).json()
-        check(q["status"] == "answered" and "Neo4j" in q["answer"], "two-hop answer mentions Neo4j")
+        q = payload(c.post("/api/v1/questions", json={"question": question, "include_graph": True}))
+        check(
+            q["status"] in ("answered", "partial") and "Neo4j" in q["answer"],
+            "two-hop answer mentions Neo4j",
+        )
+        if q["status"] == "partial":
+            print("INFO model reports partial; completeness is assessed separately in evaluation")
         cit = q["citations"][0]
         src = c.get(f"/api/v1/notes/{r['note_id']}/revisions/{cit['revision_id']}").json()
         check(
@@ -70,20 +91,23 @@ def main() -> int:
         rep = c.put(
             f"/api/v1/notes/{r['note_id']}",
             headers={"Idempotency-Key": key + "-2"},
-            json={"title": body["title"], "text": NOTE.replace("Neo4j", "Postgres")},
+            json={"title": body["title"], "text": note.replace("Neo4j", "Postgres")},
         ).json()
         check(wait(rep["job_id"])["status"] == "SUCCEEDED", "replacement published")
-        q2 = c.post("/api/v1/questions", json={"question": "What does Project Atlas use?"}).json()
-        check("Neo4j" not in q2["answer"] and "Postgres" in q2["answer"], "old evidence gone")
+        q2 = payload(c.post("/api/v1/questions", json={"question": "What does Project Atlas use?"}))
+        check(
+            "neo4j" not in q2["answer"].casefold() and "postgres" in q2["answer"].casefold(),
+            "old evidence gone",
+        )
 
         check(c.delete(f"/api/v1/notes/{r['note_id']}").status_code == 204, "delete")
         created.clear()
         check(c.get(f"/api/v1/notes/{r['note_id']}").status_code == 404, "deleted note unavailable")
-        q3 = c.post("/api/v1/questions", json={"question": "What does Project Atlas use?"}).json()
+        q3 = payload(c.post("/api/v1/questions", json={"question": "What does Project Atlas use?"}))
         check(q3["status"] == "insufficient_evidence", "no evidence after delete")
         print("SMOKE PASSED")
         return 0
-    except AssertionError as exc:
+    except (AssertionError, httpx.HTTPError) as exc:
         print(f"SMOKE FAILED: {exc}")
         return 1
     finally:

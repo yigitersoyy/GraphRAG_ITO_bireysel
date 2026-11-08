@@ -54,6 +54,8 @@ def validate_answer(raw: str, pack: EvidencePack) -> tuple[AnswerOutput | None, 
         errors.append("answer has no sentences")
     if out.status == "partial" and not out.missing_information:
         errors.append("partial answer must list missing_information")
+    if out.status == "answered" and out.missing_information:
+        errors.append("answered must not list missing_information")
     for n, s in enumerate(out.sentences):
         if not s.evidence_ids:
             errors.append(f"sentence {n} has no citation")

@@ -25,7 +25,5 @@ def get_job(request: Request, job_id: str) -> JSONResponse:
 @router.post("/{job_id}/retry")
 def retry_job(request: Request, job_id: str) -> JSONResponse:
     ctx = ctx_of(request)
-    ctx.notes.retry(job_id)
-    job = ctx.store.get_job(job_id)
-    assert job is not None
+    job = ctx.notes.retry(job_id)
     return ok(request, job_view(job), 202)

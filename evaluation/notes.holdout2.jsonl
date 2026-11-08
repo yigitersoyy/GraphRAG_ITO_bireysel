@@ -1,0 +1,8 @@
+{"id":"s01","lang":"en","title":"Pine assignment","text":"Mila works on Project Pine.","expected_claims":[{"subject":"Mila","predicate":"WORKS_ON","object":"Project Pine","polarity":"POSITIVE","modality":"ASSERTED"}]}
+{"id":"s02","lang":"en","title":"Pine approved choice","text":"The approved plan is for Project Pine to use SQLite.","expected_claims":[{"subject":"Project Pine","predicate":"USES","object":"SQLite","polarity":"POSITIVE","modality":"PLANNED"}]}
+{"id":"s03","lang":"en","title":"Moss option","text":"Project Moss might use Redis next spring.","expected_claims":[{"subject":"Project Moss","predicate":"USES","object":"Redis","polarity":"POSITIVE","modality":"POSSIBLE"}]}
+{"id":"s04","lang":"en","title":"Elif language","text":"Elif uses the programming language Lua.","expected_claims":[{"subject":"Elif","predicate":"USES","object":"Lua","polarity":"POSITIVE","modality":"ASSERTED"}]}
+{"id":"s05","lang":"tr","title":"İzmir gündemi","text":"İzmir ofisinde perşembe günü toplantı yapıldı. Bütçe onaylandı."}
+{"id":"s06","lang":"en","title":"Ash June record A","text":"In June, Project Ash uses Neo4j as its only primary database.","expected_claims":[{"subject":"Project Ash","predicate":"USES","object":"Neo4j","polarity":"POSITIVE","modality":"ASSERTED"}]}
+{"id":"s07","lang":"en","title":"Ash June record B","text":"In June, Project Ash uses MariaDB as its only primary database.","expected_claims":[{"subject":"Project Ash","predicate":"USES","object":"MariaDB","polarity":"POSITIVE","modality":"ASSERTED"}]}
+{"id":"s08","lang":"tr","title":"Esinti kararı","text":"Proje Esinti için MongoDB kullanılması kararlaştırıldı.","expected_claims":[{"subject":"Proje Esinti","predicate":"USES","object":"MongoDB","polarity":"POSITIVE","modality":"PLANNED"}]}

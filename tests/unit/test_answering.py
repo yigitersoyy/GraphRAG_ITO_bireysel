@@ -45,7 +45,11 @@ class ScriptedChat:
         if self.outputs:
             return self.outputs.pop(0)
         blocks = re.findall(r'<evidence id="(E\d+)"[^>]*>\n(.*?)\n</evidence>', user, re.S)
-        cited = [i for i, t in blocks if self.keyword in t]
+        matched = [i for i, t in blocks if self.keyword in t]
+        # The default fixture answer cites the entire running-example chain.
+        cited = (
+            [i for i, t in blocks if self.keyword in t or "Project Atlas" in t] if matched else []
+        )
         if not cited:  # a sensible model abstains when nothing supports an answer
             return json.dumps(
                 {"status": "insufficient_evidence", "sentences": [], "missing_information": ["?"]}
@@ -73,7 +77,7 @@ class Env:
         retr.setdefault("query_template", "{question}")
         self.retriever = Retriever(self.src, self.emb, self.s, **retr)
         self.chat = chat or ScriptedChat()
-        self.qa = AnswerService(self.src, self.retriever, self.chat, self.s)
+        self.qa = AnswerService(self.src, self.retriever, self.chat, self.s, review_answers=False)
 
     def drain(self):
         while self.worker.run_once():
@@ -124,6 +128,12 @@ def test_unanswerable_question_skips_generation():
     assert r.status == "insufficient_evidence" and r.citations == [] and env.chat.calls == 0
     tr = env.qa.ask("Fransa'nın başkenti nedir?")
     assert "yetecek kanıt" in tr.answer
+
+
+def test_turkish_proper_name_does_not_translate_an_english_abstention():
+    env = Env([])
+    assert env.qa.ask("Which programming language does Öykü use?").answer.startswith("The notes")
+    assert "yetecek kanıt" in env.qa.ask("Öykü hangi programlama dilini kullanıyor?").answer
 
 
 def test_empty_workspace_and_input_limits():

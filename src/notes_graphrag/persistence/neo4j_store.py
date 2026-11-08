@@ -71,6 +71,7 @@ from notes_graphrag.persistence.serialize import (
     req_dt,
     to_iso,
 )
+from notes_graphrag.persistence.workspace import CatalogEntry, NoteLink, Topic, fold
 
 T = TypeVar("T")
 TRANSIENT_ERRORS = (ServiceUnavailable, SessionExpired, Neo4jError)
@@ -85,6 +86,9 @@ def _note(d: Any) -> Note:
         desired_revision_id=d["desired_revision_id"],
         active_revision_id=d.get("active_revision_id"),
         deleted_at=opt_dt(d.get("deleted_at")),
+        topic_id=d.get("topic_id"),
+        metadata_version=int(d.get("metadata_version") or 0),
+        updated_at=opt_dt(d.get("updated_at")),
     )
 
 
@@ -519,6 +523,24 @@ class Neo4jStore:
                 if row:
                     return _job(row[0]["j"])
             return None
+
+        return self._write(fn)
+
+    def heartbeat_job(self, job_id: str, token: str, now: datetime, lease_seconds: int) -> bool:
+        def fn(tx: ManagedTransaction) -> bool:
+            rows = tx.run(
+                "MATCH (j:IngestionJob {workspace_id: $ws, job_id: $jid}) "
+                "SET j.lock_touch = $ts WITH j "
+                "WHERE j.status = 'RUNNING' AND j.lease_token = $token "
+                "AND j.lease_expires_at > $ts "
+                "SET j.lease_expires_at = $exp RETURN j.job_id AS jid",
+                ws=self.workspace_id,
+                jid=job_id,
+                token=token,
+                ts=to_iso(now),
+                exp=to_iso(now + timedelta(seconds=lease_seconds)),
+            ).data()
+            return bool(rows)
 
         return self._write(fn)
 
@@ -1059,6 +1081,225 @@ class Neo4jStore:
             return counts
 
         return self._write(fn)
+
+    # ---- workspace --------------------------------------------------------------------------
+    def metadata_version(self) -> int:
+        rows = self._rows(
+            "MATCH (w:Workspace {workspace_id:$ws}) RETURN coalesce(w.metadata_version,0) AS v",
+            ws=self.workspace_id,
+        )
+        return int(rows[0]["v"])
+
+    def list_topics(self) -> list[Topic]:
+        rows = self._rows(
+            """
+            MATCH (t:Topic {workspace_id:$ws})
+            OPTIONAL MATCH (n:Note {workspace_id:$ws, topic_id:t.topic_id})
+            WHERE n.deleted_at IS NULL
+            RETURN t, count(n) AS c ORDER BY t.name, t.topic_id
+        """,
+            ws=self.workspace_id,
+        )
+        return [
+            Topic(
+                r["t"]["topic_id"],
+                r["t"]["name"],
+                r["t"]["color_key"],
+                int(r["t"]["version"]),
+                int(r["c"]),
+            )
+            for r in rows
+        ]
+
+    def save_topic(
+        self, topic_id: str | None, name: str, color_key: str, expected_version: int | None
+    ) -> Topic:
+        tid = topic_id or str(uuid.uuid4())
+
+        def fn(tx: ManagedTransaction) -> Topic:
+            tx.run(
+                "MATCH (w:Workspace {workspace_id:$ws}) "
+                "SET w.metadata_lock = coalesce(w.metadata_lock,0)+1",
+                ws=self.workspace_id,
+            ).consume()
+            rows = tx.run(
+                "MATCH (t:Topic {workspace_id:$ws,topic_id:$id}) RETURN t",
+                ws=self.workspace_id,
+                id=tid,
+            ).data()
+            if topic_id and not rows:
+                raise NotFound("topic not found")
+            version = int(rows[0]["t"]["version"]) if rows else 0
+            if topic_id and version != expected_version:
+                raise Conflict("topic changed; reload before saving", code="METADATA_CHANGED")
+            duplicates = tx.run(
+                "MATCH (t:Topic {workspace_id:$ws,normalized_name:$name}) "
+                "WHERE t.topic_id <> $id RETURN t.topic_id",
+                ws=self.workspace_id,
+                name=fold(name),
+                id=tid,
+            ).data()
+            if duplicates:
+                raise Conflict("topic name already exists", code="TOPIC_EXISTS")
+            tx.run(
+                "MERGE (t:Topic {workspace_id:$ws,topic_id:$id}) "
+                "SET t.name=$name,t.normalized_name=$normalized,t.color_key=$color,t.version=$v "
+                "WITH t MATCH (w:Workspace {workspace_id:$ws}) "
+                "SET w.metadata_version=coalesce(w.metadata_version,0)+1",
+                ws=self.workspace_id,
+                id=tid,
+                name=name,
+                normalized=fold(name),
+                color=color_key,
+                v=version + 1,
+            ).consume()
+            return Topic(tid, name, color_key, version + 1)
+
+        return self._write(fn)
+
+    def delete_topic(self, topic_id: str, expected_version: int) -> None:
+        def fn(tx: ManagedTransaction) -> None:
+            tx.run(
+                "MATCH (w:Workspace {workspace_id:$ws}) "
+                "SET w.metadata_lock=coalesce(w.metadata_lock,0)+1",
+                ws=self.workspace_id,
+            ).consume()
+            rows = tx.run(
+                "MATCH (t:Topic {workspace_id:$ws,topic_id:$id}) RETURN t.version AS v",
+                ws=self.workspace_id,
+                id=topic_id,
+            ).data()
+            if not rows:
+                raise NotFound("topic not found")
+            if rows[0]["v"] != expected_version:
+                raise Conflict("topic changed; reload before deleting", code="METADATA_CHANGED")
+            tx.run(
+                "MATCH (n:Note {workspace_id:$ws,topic_id:$id}) "
+                "SET n.topic_id=null,n.metadata_version=coalesce(n.metadata_version,0)+1",
+                ws=self.workspace_id,
+                id=topic_id,
+            ).consume()
+            tx.run(
+                "MATCH (t:Topic {workspace_id:$ws,topic_id:$id}) DELETE t",
+                ws=self.workspace_id,
+                id=topic_id,
+            ).consume()
+            tx.run(
+                "MATCH (w:Workspace {workspace_id:$ws}) "
+                "SET w.metadata_version=coalesce(w.metadata_version,0)+1",
+                ws=self.workspace_id,
+            ).consume()
+
+        self._write(fn)
+
+    def set_note_topic(
+        self, note_id: str, topic_id: str | None, expected_version: int, now: datetime
+    ) -> Note:
+        def fn(tx: ManagedTransaction) -> Note:
+            tx.run(
+                "MATCH (w:Workspace {workspace_id:$ws}) "
+                "SET w.metadata_lock=coalesce(w.metadata_lock,0)+1",
+                ws=self.workspace_id,
+            ).consume()
+            rows = tx.run(
+                "MATCH (n:Note {workspace_id:$ws,note_id:$id}) SET n.lock_touch=$now RETURN n",
+                ws=self.workspace_id,
+                id=note_id,
+                now=to_iso(now),
+            ).data()
+            if not rows or rows[0]["n"].get("deleted_at"):
+                raise NotFound("note not found")
+            if int(rows[0]["n"].get("metadata_version") or 0) != expected_version:
+                raise Conflict(
+                    "note metadata changed; reload before saving", code="METADATA_CHANGED"
+                )
+            if (
+                topic_id
+                and not tx.run(
+                    "MATCH (t:Topic {workspace_id:$ws,topic_id:$id}) RETURN t",
+                    ws=self.workspace_id,
+                    id=topic_id,
+                ).data()
+            ):
+                raise NotFound("topic not found")
+            row = tx.run(
+                "MATCH (n:Note {workspace_id:$ws,note_id:$id}) "
+                "SET n.topic_id=$topic,n.metadata_version=$v,n.updated_at=$now "
+                "WITH n MATCH (w:Workspace {workspace_id:$ws}) "
+                "SET w.metadata_version=coalesce(w.metadata_version,0)+1 RETURN n",
+                ws=self.workspace_id,
+                id=note_id,
+                topic=topic_id,
+                v=expected_version + 1,
+                now=to_iso(now),
+            ).data()[0]
+            return _note(row["n"])
+
+        return self._write(fn)
+
+    def catalog(
+        self, q: str, topic_id: str | None, after: tuple[datetime, str] | None, limit: int
+    ) -> tuple[list[CatalogEntry], bool, int]:
+        match = """
+            MATCH (n:Note {workspace_id:$ws}) WHERE n.deleted_at IS NULL
+              AND ($topic IS NULL OR coalesce(n.topic_id,'unsorted')=$topic)
+            OPTIONAL MATCH (n)-[:ACTIVE_REVISION]->(r:NoteRevision {status:'READY'})
+            WITH n, r WHERE $q='' OR
+              toLower(replace(replace(n.title+'\\n'+coalesce(r.text,''),'İ','i'),'ı','i'))
+              CONTAINS $q
+        """
+        params: dict[str, Any] = dict(ws=self.workspace_id, topic=topic_id, q=fold(q))
+
+        def fn(tx: ManagedTransaction) -> tuple[list[CatalogEntry], bool, int]:
+            total = int(tx.run(match + " RETURN count(n) AS total", **params).data()[0]["total"])
+            rows = tx.run(
+                match
+                + """
+                WITH n,r WHERE $ac IS NULL OR n.created_at>$ac OR
+                  (n.created_at=$ac AND n.note_id>$aid)
+                WITH n,r ORDER BY n.created_at,n.note_id LIMIT $lim
+                MATCH (d:NoteRevision {workspace_id:$ws,revision_id:n.desired_revision_id})
+                OPTIONAL MATCH (j:IngestionJob {workspace_id:$ws})-[:BUILDS]->(d)
+                RETURN n,coalesce(r.text,'') AS text,d.status AS status,j
+                ORDER BY n.created_at,n.note_id
+            """,
+                **params,
+                ac=to_iso(after[0]) if after else None,
+                aid=after[1] if after else None,
+                lim=limit + 1,
+            ).data()
+            entries = [
+                CatalogEntry(
+                    _note(r["n"]), r["text"], r["status"], _job(r["j"]) if r["j"] else None
+                )
+                for r in rows
+            ]
+            return entries[:limit], len(entries) > limit, total
+
+        return self._read(fn)
+
+    def workspace_links(self, note_ids: list[str], limit: int) -> tuple[list[NoteLink], bool]:
+        rows = self._rows(
+            """
+            MATCH (n:Note {workspace_id:$ws})-[:ACTIVE_REVISION]->
+              (r:NoteRevision {status:'READY'})-[:HAS_CHUNK]->(:Chunk)
+              <-[:EVIDENCED_BY]-(:Claim)-[:SUBJECT|OBJECT]->(e:Entity)
+            WHERE n.deleted_at IS NULL AND n.note_id IN $ids
+            WITH e,collect(DISTINCT n.note_id) AS notes
+            UNWIND notes AS a UNWIND notes AS b
+            WITH e,a,b WHERE a<b
+            WITH a,b,collect(DISTINCT {id:e.entity_id,name:e.canonical_name}) AS entities
+            RETURN a,b,entities ORDER BY a,b LIMIT $lim
+        """,
+            ws=self.workspace_id,
+            ids=note_ids,
+            lim=limit + 1,
+        )
+        result = [
+            NoteLink(r["a"], r["b"], tuple(sorted((e["id"], e["name"]) for e in r["entities"])))
+            for r in rows
+        ]
+        return result[:limit], len(result) > limit
 
     # ---- operations ---------------------------------------------------------------------------
     def schema_version(self) -> int:

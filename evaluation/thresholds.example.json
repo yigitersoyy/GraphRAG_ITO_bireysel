@@ -1,0 +1,8 @@
+{
+  "description": "Proposed local engineering targets, not a model-quality approval. Review semantics separately.",
+  "modes": ["hybrid", "graph"],
+  "min_evidence_recall": 0.9,
+  "min_abstention_rate": 1.0,
+  "max_errors": 0,
+  "max_end_to_end_p95_ms": 30000
+}

@@ -157,7 +157,7 @@ def _upload(stack, name, data, key):
 
 def test_upload_rules(stack):
     assert _upload(stack, "a.md", TEXT.encode(), "u-ok").status_code == 202
-    assert _upload(stack, "a.pdf", b"%PDF-1.4", "u-pdf").status_code == 415
+    assert _upload(stack, "a.pdf", b"%PDF-1.4", "u-pdf").status_code == 422
     assert (
         _upload(stack, "a.txt", b"\xff\xfe\x00bad", "u-enc").json()["error"]["code"]
         == "INVALID_ENCODING"

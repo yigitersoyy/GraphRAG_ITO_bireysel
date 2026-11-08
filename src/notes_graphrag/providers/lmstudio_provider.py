@@ -33,6 +33,9 @@ class LMStudioProvider:
         embedding_dimensions: int = 1024,
         embedding_profile: str = "",
         timeout: float = 120,
+        temperature: float = 0.0,
+        instruction_suffix: str = "",
+        enable_thinking: bool | None = None,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         # Bearer header only when a real token is configured (loopback needs none).
@@ -45,6 +48,9 @@ class LMStudioProvider:
         self.embedding_model = embedding_model
         self.dimensions = embedding_dimensions
         self.profile = embedding_profile
+        self.temperature = temperature
+        self.instruction_suffix = instruction_suffix
+        self.enable_thinking = enable_thinking
 
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -100,11 +106,17 @@ class LMStudioProvider:
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system},
-                    {"role": "user", "content": user},
+                    {"role": "user", "content": user + self.instruction_suffix},
                 ],
-                "temperature": 0,
+                "temperature": self.temperature,
                 "max_tokens": max_tokens,
                 "stream": False,
+                **({"reasoning_effort": "none"} if self.enable_thinking is False else {}),
+                **(
+                    {"chat_template_kwargs": {"enable_thinking": self.enable_thinking}}
+                    if self.enable_thinking is not None
+                    else {}
+                ),
                 "response_format": {
                     "type": "json_schema",
                     "json_schema": {"name": schema_name, "strict": True, "schema": schema},
@@ -134,11 +146,17 @@ class LMStudioProvider:
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system},
-                    {"role": "user", "content": user},
+                    {"role": "user", "content": user + self.instruction_suffix},
                 ],
-                "temperature": 0,
+                "temperature": self.temperature,
                 "max_tokens": max_tokens,
                 "stream": False,
+                **({"reasoning_effort": "none"} if self.enable_thinking is False else {}),
+                **(
+                    {"chat_template_kwargs": {"enable_thinking": self.enable_thinking}}
+                    if self.enable_thinking is not None
+                    else {}
+                ),
             },
         )
         try:

@@ -8,14 +8,15 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from notes_graphrag.core.config import Settings
+from notes_graphrag.domain.state_machines import JobStatus
 from notes_graphrag.ingestion.chunking import CHUNKER_VERSION
 from notes_graphrag.ingestion.entity_resolution import NORMALIZATION_VERSION
 from notes_graphrag.ingestion.extraction import SCHEMA_VERSION
 from notes_graphrag.ingestion.validation import normalize_text, validate_title
 from notes_graphrag.persistence.base import Store
-from notes_graphrag.persistence.models import Submission
+from notes_graphrag.persistence.models import Job, Submission
 
-PROMPT_VERSION = "extract_v1"
+PROMPT_VERSION = "extract_v5_relation_first"
 
 
 def pipeline_fingerprint(settings: Settings) -> str:
@@ -25,7 +26,13 @@ def pipeline_fingerprint(settings: Settings) -> str:
         PROMPT_VERSION,
         NORMALIZATION_VERSION,
         settings.embedding_profile,
+        settings.embedding_model,
+        str(settings.embedding_dimensions),
+        settings.embedding_document_prefix,
         settings.extraction_model,
+        str(settings.chat_temperature),
+        settings.llm_instruction_suffix,
+        str(settings.chat_template_enable_thinking),
     ]
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
@@ -82,8 +89,22 @@ class NoteService:
             "POST", f"/notes/{note_id}/reindex", note_id, cur.title, cur.text, idempotency_key
         )
 
-    def retry(self, job_id: str) -> None:
-        self.store.retry_job(job_id, self.clock())
+    def retry(self, job_id: str) -> Job:
+        job = self.store.get_job(job_id)
+        if job is not None and job.status == JobStatus.FAILED:
+            note = self.store.get_note(job.note_id)
+            rev = self.store.get_revision(job.revision_id)
+            if (
+                note is not None
+                and note.deleted_at is None
+                and rev is not None
+                and note.desired_revision_id == rev.revision_id
+                and rev.fingerprint != pipeline_fingerprint(self.settings)
+            ):
+                return self.reindex(
+                    note.note_id, f"retry:{job_id}:{pipeline_fingerprint(self.settings)}"
+                ).job
+        return self.store.retry_job(job_id, self.clock())
 
     def delete(self, note_id: str) -> None:
         self.store.delete_note(note_id, self.clock())

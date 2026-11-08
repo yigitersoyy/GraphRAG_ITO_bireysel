@@ -15,7 +15,7 @@ from typing import Any
 from notes_graphrag.answering.service import AnswerService
 from notes_graphrag.core.config import Settings
 from notes_graphrag.core.errors import DependencyUnavailable
-from notes_graphrag.ingestion.extraction import ExtractionOutput
+from notes_graphrag.ingestion.extraction import extraction_wire_schema
 from notes_graphrag.ingestion.service import NoteService
 from notes_graphrag.ingestion.worker import Worker
 from notes_graphrag.persistence.base import Store
@@ -25,10 +25,8 @@ from notes_graphrag.persistence.migrations import latest_version
 from notes_graphrag.providers.fakes import DemoChat, FakeEmbeddings
 from notes_graphrag.providers.gate import GatedChat, GatedEmbeddings, InferenceGate
 from notes_graphrag.providers.lmstudio_provider import LMStudioProvider
-from notes_graphrag.providers.schema import inline_refs
 from notes_graphrag.retrieval.service import Retriever
 from notes_graphrag.retrieval.source import KnowledgeSource
-from notes_graphrag.retrieval.vector import QUERY_TEMPLATE_V1
 
 log = logging.getLogger("notes_graphrag.deps")
 DEMO_DIMENSIONS = 64
@@ -39,7 +37,12 @@ def effective_settings(settings: Settings, demo: bool) -> Settings:
     if not demo:
         return settings
     return settings.model_copy(
-        update={"embedding_dimensions": DEMO_DIMENSIONS, "embedding_profile": DEMO_PROFILE}
+        update={
+            "embedding_dimensions": DEMO_DIMENSIONS,
+            "embedding_profile": DEMO_PROFILE,
+            "embedding_query_template": "{question}",
+            "embedding_document_prefix": "",
+        }
     )
 
 
@@ -51,6 +54,25 @@ class Providers:
     query_template: str
     lm: LMStudioProvider | None = None
 
+    def close(self) -> None:
+        if self.lm is not None:
+            self.lm.close()
+        if self.emb is not self.lm and hasattr(self.emb, "close"):
+            self.emb.close()
+
+
+@dataclass
+class Resources:
+    storage: Any
+    providers: Providers
+
+    def close(self) -> None:
+        try:
+            self.providers.close()
+        finally:
+            if self.storage is not None:
+                self.storage.close()
+
 
 def build_providers(settings: Settings, *, demo: bool) -> Providers:
     if demo:
@@ -58,6 +80,7 @@ def build_providers(settings: Settings, *, demo: bool) -> Providers:
         return Providers(
             chat, FakeEmbeddings(DEMO_DIMENSIONS, DEMO_PROFILE), lambda: None, "{question}"
         )
+    settings.require_live_models()
     lm = LMStudioProvider(
         base_url=settings.llm_base_url,
         api_key=settings.lm_studio_api_key,
@@ -65,12 +88,18 @@ def build_providers(settings: Settings, *, demo: bool) -> Providers:
         embedding_dimensions=settings.embedding_dimensions,
         embedding_profile=settings.embedding_profile,
         timeout=settings.provider_timeout_seconds,
+        temperature=settings.chat_temperature,
+        instruction_suffix=settings.llm_instruction_suffix,
+        enable_thinking=settings.chat_template_enable_thinking,
     )
     emb: Any = lm
-    if settings.embedding_base_url != settings.llm_base_url:
+    if (
+        settings.embedding_base_url != settings.llm_base_url
+        or settings.embedding_api_key is not None
+    ):
         emb = LMStudioProvider(
             base_url=settings.embedding_base_url,
-            api_key=settings.embedding_api_key,
+            api_key=settings.embedding_api_key or settings.lm_studio_api_key,
             embedding_model=settings.embedding_model,
             embedding_dimensions=settings.embedding_dimensions,
             embedding_profile=settings.embedding_profile,
@@ -78,9 +107,13 @@ def build_providers(settings: Settings, *, demo: bool) -> Providers:
         )
 
     def probe() -> None:
-        lm.chat_text(model=settings.extraction_model, system="Be brief.", user="ok", max_tokens=4)
+        # Small reasoning-capable runtimes can consume a few tokens before final content.
+        # A four-token completion can therefore leave recovery permanently closed.
+        lm.chat_text(model=settings.extraction_model, system="Be brief.", user="ok", max_tokens=64)
+        if emb is not lm:
+            emb.embed(["probe"])
 
-    return Providers(lm, emb, probe, QUERY_TEMPLATE_V1, lm)
+    return Providers(lm, emb, probe, settings.embedding_query_template, lm)
 
 
 def build_storage(settings: Settings, backend: str) -> tuple[Store, KnowledgeSource, Any]:
@@ -129,7 +162,7 @@ def build_gate(settings: Settings, store: Store, providers: Providers) -> Infere
 def build_worker(
     settings: Settings, store: Store, providers: Providers, gate: InferenceGate, owner: str
 ) -> Worker:
-    schema = inline_refs(ExtractionOutput.model_json_schema())
+    schema = extraction_wire_schema()
     return Worker(
         store,
         settings,
@@ -173,7 +206,7 @@ def build_context(
     gated_emb = GatedEmbeddings(providers.emb, gate, "api")
     gated_chat = GatedChat(providers.chat, gate, "api")
     retriever = Retriever(knowledge, gated_emb, s, query_template=providers.query_template)
-    answers = AnswerService(knowledge, retriever, gated_chat, s)
+    answers = AnswerService(knowledge, retriever, gated_chat, s, review_answers=not demo)
     worker = build_worker(s, store, providers, gate, f"worker:embedded:{id(store)}")
 
     def lm_status() -> dict[str, Any]:
@@ -208,5 +241,5 @@ def build_context(
         demo=demo,
         lm_status=lm_status,
         embedded_worker=embedded_worker,
-        closeable=closeable,
+        closeable=Resources(closeable, providers),
     )

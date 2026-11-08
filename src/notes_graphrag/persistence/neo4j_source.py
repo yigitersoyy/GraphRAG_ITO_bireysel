@@ -177,6 +177,16 @@ class Neo4jKnowledge:
         rows = self._rows(CLAIM_MATCH + "AND n.note_id = $nid " + CLAIM_RETURN, nid=note_id)
         return [_claim(r) for r in rows]
 
+    def claims_for_notes(self, note_ids: list[str], limit: int) -> list[ClaimRecord]:
+        if not note_ids:
+            return []
+        rows = self._rows(
+            CLAIM_MATCH + "AND n.note_id IN $nids " + CLAIM_RETURN + " LIMIT $limit",
+            nids=note_ids,
+            limit=limit,
+        )
+        return [_claim(r) for r in rows]
+
     def note_active_chunks(self, note_id: str) -> int:
         rows = self._rows(ACTIVE_CHUNK + "AND n.note_id = $nid RETURN count(c) AS k", nid=note_id)
         return int(rows[0]["k"]) if rows else 0

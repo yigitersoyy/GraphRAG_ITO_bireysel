@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -105,7 +107,10 @@ def test_full_flow_ask_graph_update_delete(client, ctx):
     assert replay.status_code == 409 and replay.json()["error"]["code"] == "NOTE_DELETED"
 
 
-def test_pagination_stable_order_and_limits(client):
+def test_pagination_stable_order_and_limits(client, ctx):
+    # Timestamps can tie on Windows. The public order is (created_at, note_id),
+    # not insertion order: deliberately exercise the UUID tie breaker.
+    ctx.notes.clock = lambda: datetime(2026, 1, 1, tzinfo=UTC)
     ids = [
         post_note(client, key=f"k{i}", text=f"Note {i}.", title=f"T{i}").json()["note_id"]
         for i in range(5)
@@ -114,7 +119,7 @@ def test_pagination_stable_order_and_limits(client):
     page2 = client.get("/api/v1/notes", params={"limit": 2, "cursor": page1["next_cursor"]}).json()
     page3 = client.get("/api/v1/notes", params={"limit": 2, "cursor": page2["next_cursor"]}).json()
     seen = [n["note_id"] for p in (page1, page2, page3) for n in p["items"]]
-    assert seen == ids and page3["next_cursor"] is None
+    assert seen == sorted(ids) and page3["next_cursor"] is None
     assert client.get("/api/v1/notes", params={"limit": 101}).status_code == 422
     bad = client.get("/api/v1/notes", params={"cursor": "###"})
     assert bad.status_code == 400 and bad.json()["error"]["code"] == "INVALID_CURSOR"
@@ -130,7 +135,7 @@ def test_upload_rules(client):
         )
 
     assert up("a.md", NOTE.encode()).status_code == 202
-    assert up("a.pdf", b"x", "u2").status_code == 415
+    assert up("a.exe", b"x", "u2").status_code == 415
     bad = up("a.txt", b"\xff\xfe\x00", "u3")
     assert bad.status_code == 422 and bad.json()["error"]["code"] == "INVALID_ENCODING"
     big = up("b.txt", b"a" * (1_048_576 + 1), "u4")

@@ -26,6 +26,9 @@ class Note:
     desired_revision_id: str
     active_revision_id: str | None = None
     deleted_at: datetime | None = None
+    topic_id: str | None = None
+    metadata_version: int = 0
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)

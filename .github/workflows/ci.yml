@@ -36,3 +36,50 @@ jobs:
           name: evaluation-summary
           path: reports/evaluation/summary.json
           if-no-files-found: ignore
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install using the PowerShell setup entry point
+        shell: powershell
+        run: .\scripts\setup.ps1
+      - name: Unit, memory contract, UI and simulator tests
+        run: uv run pytest -q --basetemp reports/ci-pytest
+      - name: Windows service lifecycle and HTTP smoke
+        run: uv run python scripts/verify_runtime.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: uv sync --frozen --group dev
+      - run: npm ci --no-fund --no-audit
+        working-directory: frontend
+      - run: npm run build && npm test
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: uv run python scripts/runtime.py start --mode demo --api-port 18001 --ui-port 18502
+      - run: npm run test:e2e
+        working-directory: frontend
+      - run: uv run python scripts/runtime.py stop --mode demo
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-verification
+          path: reports/frontend-e2e/

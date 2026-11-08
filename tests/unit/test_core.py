@@ -33,7 +33,7 @@ def test_decode_rules():
     with pytest.raises(PayloadTooLarge):
         decode_text(b"x" * (S.max_note_bytes + 1), S)
     with pytest.raises(ValidationFailed):
-        validate_filename("a.pdf")
+        validate_filename("a.exe")
 
 
 @pytest.mark.parametrize(

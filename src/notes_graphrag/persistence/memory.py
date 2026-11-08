@@ -44,6 +44,7 @@ from notes_graphrag.persistence.models import (
     StagedChunk,
     Submission,
 )
+from notes_graphrag.persistence.workspace import CatalogEntry, NoteLink, Topic, fold
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,8 @@ class MemoryStore:
     probes: list[ProbeRecord] = field(default_factory=list)
     heartbeat_at: datetime | None = None
     lock: threading.RLock = field(default_factory=threading.RLock)
+    topics: dict[str, Topic] = field(default_factory=dict)
+    metadata_ver: int = 0
 
     # ---- notes and submission -------------------------------------------------------------
     def submit(
@@ -153,7 +156,7 @@ class MemoryStore:
             )
             self.revisions[rev.revision_id] = rev
             self.jobs[job.job_id] = job
-            note = replace(note, title=title, desired_revision_id=rev.revision_id)
+            note = replace(note, title=title, desired_revision_id=rev.revision_id, updated_at=now)
             self.notes[note.note_id] = note
             self.idem[rkey] = IdemRec(payload_hash, note.note_id, rev.revision_id, job.job_id, now)
             return Submission(note, rev, job, replayed=False)
@@ -288,6 +291,17 @@ class MemoryStore:
         ):
             raise StaleLease("lease lost")
         return job
+
+    def heartbeat_job(self, job_id: str, token: str, now: datetime, lease_seconds: int) -> bool:
+        with self.lock:
+            try:
+                job = self._fenced(job_id, token, now)
+            except (KeyError, StaleLease):
+                return False
+            self.jobs[job_id] = replace(
+                job, lease_expires_at=now + timedelta(seconds=lease_seconds)
+            )
+            return True
 
     def record_progress(
         self, job_id: str, token: str, now: datetime, stage: Stage, chunks_total: int
@@ -517,6 +531,133 @@ class MemoryStore:
                 del self.idem[rkey]
                 counts["idempotency"] += 1
         return counts
+
+    # ---- workspace --------------------------------------------------------------------------
+    def metadata_version(self) -> int:
+        with self.lock:
+            return self.metadata_ver
+
+    def list_topics(self) -> list[Topic]:
+        with self.lock:
+            return sorted(
+                [
+                    replace(
+                        t,
+                        note_count=sum(
+                            n.topic_id == t.topic_id and n.deleted_at is None
+                            for n in self.notes.values()
+                        ),
+                    )
+                    for t in self.topics.values()
+                ],
+                key=lambda t: (t.name, t.topic_id),
+            )
+
+    def save_topic(
+        self, topic_id: str | None, name: str, color_key: str, expected_version: int | None
+    ) -> Topic:
+        with self.lock:
+            old = self.topics.get(topic_id or "")
+            if topic_id and old is None:
+                raise NotFound("topic not found")
+            if old and old.version != expected_version:
+                raise Conflict("topic changed; reload before saving", code="METADATA_CHANGED")
+            if any(
+                fold(t.name) == fold(name) and t.topic_id != topic_id for t in self.topics.values()
+            ):
+                raise Conflict("topic name already exists", code="TOPIC_EXISTS")
+            topic = Topic(
+                topic_id or str(uuid.uuid4()), name, color_key, old.version + 1 if old else 1
+            )
+            self.topics[topic.topic_id] = topic
+            self.metadata_ver += 1
+            return topic
+
+    def delete_topic(self, topic_id: str, expected_version: int) -> None:
+        with self.lock:
+            topic = self.topics.get(topic_id)
+            if topic is None:
+                raise NotFound("topic not found")
+            if topic.version != expected_version:
+                raise Conflict("topic changed; reload before deleting", code="METADATA_CHANGED")
+            for nid, n in self.notes.items():
+                if n.topic_id == topic_id and n.deleted_at is None:
+                    self.notes[nid] = replace(
+                        n, topic_id=None, metadata_version=n.metadata_version + 1
+                    )
+            del self.topics[topic_id]
+            self.metadata_ver += 1
+
+    def set_note_topic(
+        self, note_id: str, topic_id: str | None, expected_version: int, now: datetime
+    ) -> Note:
+        with self.lock:
+            n = self._live_note(note_id)
+            if n.metadata_version != expected_version:
+                raise Conflict(
+                    "note metadata changed; reload before saving", code="METADATA_CHANGED"
+                )
+            if topic_id and topic_id not in self.topics:
+                raise NotFound("topic not found")
+            n = replace(
+                n, topic_id=topic_id, metadata_version=n.metadata_version + 1, updated_at=now
+            )
+            self.notes[note_id] = n
+            self.metadata_ver += 1
+            return n
+
+    def catalog(
+        self, q: str, topic_id: str | None, after: tuple[datetime, str] | None, limit: int
+    ) -> tuple[list[CatalogEntry], bool, int]:
+        with self.lock:
+            entries = []
+            for n in self.notes.values():
+                if n.deleted_at is not None:
+                    continue
+                if topic_id is not None and (n.topic_id or "unsorted") != topic_id:
+                    continue
+                active = self.revisions.get(n.active_revision_id or "")
+                text = active.text if active and active.status == RevisionStatus.READY else ""
+                if q and fold(q) not in fold(n.title + "\n" + text):
+                    continue
+                desired = self.revisions[n.desired_revision_id]
+                entries.append(
+                    CatalogEntry(
+                        n, text, desired.status.value, self.job_for_revision(n.desired_revision_id)
+                    )
+                )
+            entries.sort(key=lambda e: (e.note.created_at, e.note.note_id))
+            total = len(entries)
+            if after:
+                entries = [e for e in entries if (e.note.created_at, e.note.note_id) > after]
+            return entries[:limit], len(entries) > limit, total
+
+    def workspace_links(self, note_ids: list[str], limit: int) -> tuple[list[NoteLink], bool]:
+        from collections import defaultdict
+        from itertools import combinations
+
+        with self.lock:
+            by_entity: dict[str, set[str]] = defaultdict(set)
+            for c in self.claims.values():
+                rev = self.revisions.get(c.revision_id)
+                n = self.notes.get(rev.note_id) if rev else None
+                if (
+                    not n
+                    or n.note_id not in note_ids
+                    or n.deleted_at is not None
+                    or n.active_revision_id != c.revision_id
+                    or not rev
+                    or rev.status != RevisionStatus.READY
+                ):
+                    continue
+                by_entity[c.subject_id].add(n.note_id)
+                by_entity[c.object_id].add(n.note_id)
+            pairs: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
+            for eid in sorted(by_entity):
+                for a, b in combinations(sorted(by_entity[eid]), 2):
+                    pairs[a, b].append((eid, self.entities[eid].canonical_name))
+            rows = [NoteLink(a, b, tuple(entities)) for (a, b), entities in sorted(pairs.items())]
+            return rows[:limit], len(rows) > limit
 
     # ---- operations -------------------------------------------------------------------------
     def health(self) -> dict[str, Any]:

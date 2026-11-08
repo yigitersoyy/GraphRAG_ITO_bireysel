@@ -36,21 +36,27 @@ class BodyLimitMiddleware:
     handler maps a BodyTooLarge cause back to 413 (see api/app.py).
     """
 
-    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+    def __init__(self, app: ASGIApp, max_bytes: int, max_upload_bytes: int | None = None) -> None:
         self.app = app
         self.max_bytes = max_bytes
+        self.max_upload_bytes = max_upload_bytes or max_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        max_bytes = (
+            self.max_upload_bytes
+            if scope["path"].rstrip("/") in ("/api/v1/notes/upload", "/api/v1/notes/upload/preview")
+            else self.max_bytes
+        )
         for name, value in scope["headers"]:
             if name == b"content-length":
                 try:
                     declared = int(value)
                 except ValueError:
                     declared = -1
-                if declared < 0 or declared > self.max_bytes:
+                if declared < 0 or declared > max_bytes:
                     await too_large_response(scope, receive, send)
                     return
 
@@ -62,7 +68,7 @@ class BodyLimitMiddleware:
             message = await receive()
             if message["type"] == "http.request":
                 seen += len(message.get("body", b""))
-                if seen > self.max_bytes:
+                if seen > max_bytes:
                     raise BodyTooLarge()
             return message
 

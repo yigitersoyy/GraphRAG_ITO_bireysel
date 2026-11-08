@@ -162,6 +162,7 @@ def test_turkish_dotted_i_matches_case_insensitively(db):
 
 def test_worker_in_separate_process_processes_api_submission(db):
     driver, settings = db
+    settings = settings.model_copy(update={"chat_template_enable_thinking": False})
     store = _store(driver, settings)
     svc = NoteService(store, settings, lambda: datetime.now(UTC))
     sub = svc.create("Cross", TEXT, "multiproc")
@@ -172,6 +173,12 @@ def test_worker_in_separate_process_processes_api_submission(db):
         "NEO4J_PASSWORD": settings.neo4j_password.get_secret_value(),
         "NEO4J_DATABASE": "neo4j",
         "WORKER_POLL_SECONDS": "0.1",
+        # Keep the child on the same pipeline as the submitter, irrespective of .env.
+        "EXTRACTION_MODEL": settings.extraction_model,
+        "EMBEDDING_MODEL": settings.embedding_model,
+        "CHAT_TEMPERATURE": str(settings.chat_temperature),
+        "LLM_INSTRUCTION_SUFFIX": settings.llm_instruction_suffix,
+        "CHAT_TEMPLATE_ENABLE_THINKING": "false",
         "PYTHONPATH": str(REPO / "src"),
     }
     proc = subprocess.Popen(
@@ -197,7 +204,16 @@ def test_worker_in_separate_process_processes_api_submission(db):
             sub.note.note_id
         )
     finally:
-        proc.terminate()
+        if os.name == "nt" and proc.poll() is None:
+            # Stop only this owned process tree, including the Windows venv child.
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        else:
+            proc.terminate()
         try:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:

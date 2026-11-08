@@ -136,5 +136,11 @@ class MemoryKnowledge:
     def claims_for_note(self, note_id: str) -> list[ClaimRecord]:
         return [c for c in self._claims() if c.note_id == note_id]
 
+    def claims_for_notes(self, note_ids: list[str], limit: int) -> list[ClaimRecord]:
+        selected = set(note_ids)
+        return sorted(
+            (c for c in self._claims() if c.note_id in selected), key=lambda c: c.claim_id
+        )[:limit]
+
     def note_active_chunks(self, note_id: str) -> int:
         return sum(1 for rev, _ in self._active().values() if rev.note_id == note_id)

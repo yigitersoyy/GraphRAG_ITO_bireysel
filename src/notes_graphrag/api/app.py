@@ -17,7 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from notes_graphrag.api.dependencies import AppContext
 from notes_graphrag.api.limits import BodyLimitMiddleware, BodyTooLarge
-from notes_graphrag.api.routes import graph, health, jobs, notes, questions
+from notes_graphrag.api.routes import graph, health, jobs, notes, questions, workspace
 from notes_graphrag.core.errors import AppError
 from notes_graphrag.ingestion.worker import run_forever
 
@@ -133,7 +133,18 @@ def create_app(ctx: AppContext) -> FastAPI:
         log.exception("unhandled error")
         return _envelope(request, "INTERNAL_ERROR", "internal error", 500)
 
-    app.add_middleware(BodyLimitMiddleware, max_bytes=ctx.settings.max_request_bytes)
-    for r in (notes.router, jobs.router, questions.router, graph.router, health.router):
+    app.add_middleware(
+        BodyLimitMiddleware,
+        max_bytes=ctx.settings.max_request_bytes,
+        max_upload_bytes=ctx.settings.max_upload_bytes + 2 * 1024 * 1024,
+    )
+    for r in (
+        notes.router,
+        jobs.router,
+        questions.router,
+        graph.router,
+        health.router,
+        workspace.router,
+    ):
         app.include_router(r)
     return app

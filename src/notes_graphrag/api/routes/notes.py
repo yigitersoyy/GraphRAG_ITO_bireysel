@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
@@ -9,16 +9,24 @@ from fastapi.responses import JSONResponse
 from notes_graphrag.api.common import ctx_of, idempotency_key, ok
 from notes_graphrag.api.schemas import NoteBody
 from notes_graphrag.api.views import decode_cursor, encode_cursor, note_view
-from notes_graphrag.core.errors import NotFound
+from notes_graphrag.core.errors import AppError, NotFound
 from notes_graphrag.domain.state_machines import RevisionStatus
-from notes_graphrag.ingestion.validation import decode_text, validate_filename
+from notes_graphrag.ingestion.documents import import_document
+from notes_graphrag.ingestion.topics import assign_automatic_topic
+from notes_graphrag.ingestion.validation import validate_filename
 from notes_graphrag.persistence.models import Note, Submission
 
 router = APIRouter(prefix="/api/v1/notes")
 Key = Annotated[str, Depends(idempotency_key)]
 
 
-def _accepted(request: Request, sub: Submission) -> JSONResponse:
+def _accepted(request: Request, sub: Submission, *, auto_topic: bool = False) -> JSONResponse:
+    warning = None
+    if auto_topic and not sub.replayed:
+        try:
+            assign_automatic_topic(ctx_of(request).store, sub.note.note_id, datetime.now(UTC))
+        except AppError:
+            warning = "Not kaydedildi; otomatik konu atanamadı. Listeden bir konu seçebilirsiniz."
     return ok(
         request,
         {
@@ -27,6 +35,7 @@ def _accepted(request: Request, sub: Submission) -> JSONResponse:
             "job_id": sub.job.job_id,
             "status": sub.job.status.value.lower(),
             "replayed": sub.replayed,
+            "topic_warning": warning,
         },
         202,
     )
@@ -41,7 +50,11 @@ def _live(request: Request, note_id: str) -> Note:
 
 @router.post("")
 def create_note(request: Request, body: NoteBody, key: Key) -> JSONResponse:
-    return _accepted(request, ctx_of(request).notes.create(body.title, body.text, key))
+    return _accepted(
+        request,
+        ctx_of(request).notes.create(body.title, body.text, key),
+        auto_topic=body.auto_topic,
+    )
 
 
 @router.post("/upload")
@@ -50,12 +63,22 @@ def upload_note(
     key: Key,
     file: Annotated[UploadFile, File()],
     title: Annotated[str, Form()],
+    auto_topic: Annotated[bool, Form()] = True,
 ) -> JSONResponse:
     ctx = ctx_of(request)
     validate_filename(file.filename or "")
-    raw = file.file.read(ctx.settings.max_note_bytes + 1)  # bounded read
-    text = decode_text(raw, ctx.settings)
-    return _accepted(request, ctx.notes.create(title, text, key))
+    raw = file.file.read(ctx.settings.max_upload_bytes + 1)  # bounded read
+    text = import_document(file.filename or "", raw, ctx.settings)
+    return _accepted(request, ctx.notes.create(title, text, key), auto_topic=auto_topic)
+
+
+@router.post("/upload/preview")
+def preview_upload(request: Request, file: Annotated[UploadFile, File()]) -> JSONResponse:
+    """Read-only conversion: no note, job, model call or file retention."""
+    ctx = ctx_of(request)
+    validate_filename(file.filename or "")
+    raw = file.file.read(ctx.settings.max_upload_bytes + 1)
+    return ok(request, {"text": import_document(file.filename or "", raw, ctx.settings)})
 
 
 @router.get("")

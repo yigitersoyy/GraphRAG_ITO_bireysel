@@ -63,6 +63,10 @@ def note_view(store: Store, note: Note) -> dict[str, Any]:
         "note_id": note.note_id,
         "title": note.title,
         "created_at": iso(note.created_at),
+        "updated_at": iso(note.updated_at),
+        "topic_id": note.topic_id,
+        "metadata_version": note.metadata_version,
+        "desired_revision_id": note.desired_revision_id,
         "state": note_state(store, note),
         "active_revision_id": note.active_revision_id,
         "pending_revision_id": (

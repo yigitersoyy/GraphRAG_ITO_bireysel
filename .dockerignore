@@ -2,4 +2,11 @@
 !Dockerfile
 !wheelhouse
 !requirements.lock.txt
+!requirements.ui.lock.txt
 !migrations
+!ui
+!.streamlit
+!frontend
+frontend/node_modules
+frontend/dist
+frontend/*.tsbuildinfo

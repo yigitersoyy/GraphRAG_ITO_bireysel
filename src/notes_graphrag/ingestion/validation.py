@@ -7,7 +7,7 @@ import re
 from notes_graphrag.core.config import Settings
 from notes_graphrag.core.errors import PayloadTooLarge, UnsupportedMedia, ValidationFailed
 
-SUPPORTED_SUFFIXES = (".txt", ".md")
+SUPPORTED_SUFFIXES = (".txt", ".md", ".pdf", ".docx", ".xlsx", ".xls")
 # C0 and C1 controls except tab, line feed and carriage return (NUL is never legitimate note text).
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
@@ -48,5 +48,7 @@ def validate_title(title: str, settings: Settings) -> str:
 
 
 def validate_filename(name: str) -> None:
+    if name.lower().endswith(".doc"):
+        raise UnsupportedMedia("Eski .doc dosyasını Word'de .docx olarak kaydedip yükleyin.")
     if not name.lower().endswith(SUPPORTED_SUFFIXES):
-        raise UnsupportedMedia("unsupported file type")
+        raise UnsupportedMedia("TXT, Markdown, PDF, Word (.docx) veya Excel (.xlsx/.xls) yükleyin.")

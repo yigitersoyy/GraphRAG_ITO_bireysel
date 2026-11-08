@@ -1,5 +1,35 @@
 # Operations
 
+## Windows and 7 November 2026 update
+
+Use [windows.md](windows.md) for PowerShell setup, mode-specific start/stop, diagnostics,
+separate local/container addresses and offline API/UI builds. The current architecture/backlog
+is [MIMARI_VE_YAPILACAKLAR.md](MIMARI_VE_YAPILACAKLAR.md); the earlier section-numbered design
+document referenced in older code is not included in this checkout.
+
+Compose now includes a separate `ui` build target/service: the approved React workspace is
+built with Node and served by Nginx, with same-origin API proxying. Native demos use the
+Python static/proxy entry point. The lifecycle tool uses distinct
+`notes-graphrag-persistent-demo` and `notes-graphrag-live` projects/volumes.
+See [UI implementation](ARAYUZ_UYGULAMA_RAPORU.md). Streamlit is retained as an optional legacy target.
+
+Real Qwen 2.5 7B / Nomic 768-dimensional probes have been exercised from the application
+container; the later selected local chat profile is Qwen3 8B with an explicit `/no_think`
+suffix and temperature 0.2. Live evaluation is implemented; see [evaluation instructions](../evaluation/README.md).
+Historical statements below about unavailable LM Studio describe the 6 November environment,
+not the current machine. Consult [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) for current results.
+
+Source offsets for a unique, exact model-supplied quote can now be derived from the note before
+strict extraction validation. Ambiguous/missing quotes are not guessed. The answer wire schema
+requires sentence and citation fields even when the Python parser supplies defaults.
+The extraction wire schema omits numeric positions and schema version: those belong to the
+server. Legacy outputs with numeric positions still undergo the same strict validation.
+
+The new `scripts/neo4j_archive.py` provides cross-platform backup/restore. Backup restores the
+source's prior running state; restore requires a stopped, empty target and leaves it stopped.
+See the Windows guide for commands. Restart persistence and a restore into an empty volume
+were verified on 7 November; the full evidence is kept in `reports/persistence-verification.json`.
+
 ## Services
 
 | Service | Role | Started by |
@@ -8,6 +38,7 @@
 | migrate | Applies Cypher migrations, then exits | `compose.yaml` (`migrate`) |
 | api | FastAPI on port 8000 (loopback by default) | `compose.yaml` (`api`) |
 | worker | Ingestion loop: leases jobs, extracts, embeds, publishes | `compose.yaml` (`worker`) |
+| ui | React workspace + Nginx proxy on loopback port 8501 | `compose.yaml` (`ui`) |
 | LM Studio | Chat and embedding models | Host, not Compose |
 
 Run exactly one worker in the MVP. Lease fencing keeps extra workers safe, but scaling is not tested
@@ -24,7 +55,9 @@ docker compose up -d api worker
 curl --fail http://127.0.0.1:8000/health/ready
 ```
 
-`scripts/build_wheelhouse.sh` exists because the image is built offline from the locked
+The Python app stage is installed offline from locked wheels; the frontend build stage uses
+`npm ci` and `frontend/package-lock.json` and needs package registry access on its first build.
+All runtime browser assets are served locally. `scripts/build_wheelhouse.sh` exists because the Python image is built offline from the locked
 dependencies. The build container does not trust the sandbox TLS interception CA, so fetching
 packages inside the image failed. Building the wheelhouse on the host avoids that and makes the image
 build reproducible. Run the script again after any dependency or source change.
@@ -137,8 +170,11 @@ Demo mode cannot be probed and is reported as exempt. Readiness in demo mode say
 
 ## Request limits
 
-- Bodies larger than `MAX_REQUEST_BYTES` (default 2 MiB) get `413 PAYLOAD_TOO_LARGE`, whether or not
-  the client sent a Content-Length. Upload limits (1 MiB of file content) apply on top of that.
+- Ordinary bodies larger than `MAX_REQUEST_BYTES` (default 2 MiB) get `413 PAYLOAD_TOO_LARGE`, whether or not
+  the client sent a Content-Length. The two document upload endpoints instead allow
+  `MAX_UPLOAD_BYTES` + 2 MiB multipart overhead (default 12 MiB). Files are independently
+  limited to 1 MiB for UTF-8 text and 10 MiB for PDF/Word/Excel; extracted text remains bounded
+  by `MAX_NOTE_CHARS` (100,000) and `MAX_NOTE_BYTES` (1 MiB). See [document import](BELGE_YUKLEME.md).
 - Notes may not contain control characters except tab, line feed and carriage return
   (`422 CONTROL_CHARACTERS`). NUL is never accepted.
 - Every failure, including unknown routes, wrong methods and malformed JSON, uses the same error
@@ -176,13 +212,12 @@ Two details that matter when reproducing this:
 
 ## Known limits (be explicit with users)
 
-- **Live LM Studio was not run.** No LM Studio runs in this environment, and the lmstudio.ai site
-  is unreachable from here. Everything LM Studio-related is verified against the HTTP contract
-  simulator (`tests/support/lmstudio_sim.py`), not against the product. The first real run is the
-  probe and smoke test on a machine with the models loaded.
-- **No real embedding or chat model was tested.** A candidate multilingual embedding model could
-  not be downloaded: its weights are served from storage that the sandbox cannot reach. Extraction
-  and answers use rule-based fakes in demo mode. Model quality is not measured.
+- **Live validation is model-specific.** On 7 November the selected Qwen3 8B Q4_K_M and Nomic
+  v1.5 Q4_K_M (768 dimensions) models were connected and measured. Earlier simulator results do not certify real model
+  quality; current limits and actual outcomes are recorded in `DEVELOPMENT_PLAN.md`.
+- **Model quality is a separate acceptance criterion.** Live evaluation records failed
+  extraction, missing evidence, structural citation checks and pending semantic review. A
+  successful health probe or demo run must not be presented as real-model quality approval.
 - Persistence is Neo4j. The in-memory store is for demos and tests only and loses data on exit.
 - No authentication. Keep the API on loopback or behind an authenticated gateway.
 - Full-text search does not stem (see decision 0001).
@@ -192,3 +227,26 @@ Two details that matter when reproducing this:
 - One worker is the tested configuration. Several workers are safe by design (leases and fencing),
   but throughput with more than one was not measured.
 - Tests clear the Neo4j database they run against. Run them on a disposable instance only.
+
+## Long-running job ownership (2026-11-07)
+
+Workers renew the job lease and workspace heartbeat while inference is running. Renewal is token-fenced and rejects expired, reassigned or cancelled jobs. Recovery probes use 64 tokens; batch probe startup may wait for an old slot lease to expire, while interactive admission keeps its short wait budget. See [current verification](ARAYUZ_ONCESI_DOGRULAMA.md).
+
+## Extraction pipeline upgrades
+
+A job revision records the extraction pipeline fingerprint. After changing prompts/model/profile,
+an old pending or resumed job fails with `PIPELINE_CHANGED` rather than mixing staged chunks.
+Retrying its current failed revision creates a fresh revision/job under the new fingerprint.
+The retry API returns that job; follow its new ID. Published revisions remain searchable until
+a replacement is successfully published. Existing notes are not bulk reindexed on startup.
+
+The bounded citation-chain check is a provenance guard. Earlier semantic failures are retained
+in the historical quality reports; final regression and fresh holdout passed the sampled local
+acceptance. Model-only disagreement after one repair is visible as `semantic_review_uncertain`;
+schema/citation/known-type errors remain hard failures. Limited source-qualifier fallback
+preserves possible/planned wording and does not infer confirmed use. See [delivery](TESLIM_RAPORU.md).
+
+The Nginx UI uses Docker's embedded DNS resolver with a five-second cache and a variable
+upstream, so recreating API does not require recreating UI. The final API-recreation check
+passed with the UI container unchanged. See [Nginx variable proxy resolution](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass)
+and [Docker DNS services](https://docs.docker.com/engine/network/#dns-services).

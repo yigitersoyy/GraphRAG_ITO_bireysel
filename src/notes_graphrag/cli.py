@@ -50,7 +50,10 @@ def cmd_migrate(settings: Settings, demo: bool) -> int:
 
 def cmd_probe(settings: Settings, args: argparse.Namespace) -> int:
     """Run the LM Studio capability probes; with --record, store the outcome for readiness."""
+    import json
+    from dataclasses import asdict
     from datetime import UTC, datetime
+    from pathlib import Path
 
     from notes_graphrag.api.dependencies import (
         build_gate,
@@ -67,11 +70,19 @@ def cmd_probe(settings: Settings, args: argparse.Namespace) -> int:
     s = effective_settings(settings, False)
     providers = build_providers(s, demo=False)
     assert providers.lm is not None
-    store, _knowledge, closeable = build_storage(s, "neo4j")
+    closeable = None
     try:
+        store, _knowledge, closeable = build_storage(s, "neo4j")
         # Diagnostics use the same inference slot as ordinary requests (architecture 12.2).
         gate = build_gate(s, store, providers)
-        results = run_probes(GatedLM(providers.lm, gate, "probe"), s)
+        # Batch diagnostics may follow a crashed process. Let its lease expire safely;
+        # interactive API callers keep the configured shorter admission timeout.
+        gate.wait = max(gate.wait, s.job_lease_seconds + 5)
+        results = run_probes(
+            GatedLM(providers.lm, gate, "probe"),
+            s,
+            embedding_provider=GatedLM(providers.emb, gate, "probe-embedding"),
+        )
         passed = all(r.ok for r in results)
         for r in results:
             print(f"[{'ok' if r.ok else 'FAIL'}] {r.name}: {r.code} {r.detail}")
@@ -84,7 +95,31 @@ def cmd_probe(settings: Settings, args: argparse.Namespace) -> int:
                 datetime.now(UTC),
             )
             print("recorded" + ("" if passed else " (failed result; readiness stays closed)"))
+        if args.report:
+            path = Path(args.report)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "recorded_at": datetime.now(UTC).isoformat(),
+                        "fingerprint": profile_fingerprint(s),
+                        "passed": passed,
+                        "models": {
+                            "extraction": s.extraction_model,
+                            "answer": s.answer_model,
+                            "embedding": s.embedding_model,
+                            "dimensions": s.embedding_dimensions,
+                            "profile": s.embedding_profile,
+                        },
+                        "results": [asdict(r) for r in results],
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
     finally:
+        providers.close()
         if closeable is not None:
             closeable.close()
     return 0 if passed else 1
@@ -103,9 +138,19 @@ def cmd_serve(settings: Settings, args: argparse.Namespace) -> int:
         embedded_worker=args.embedded_worker,
     )
     app = create_app(ctx)
-    uvicorn.run(app, host=args.host, port=args.port, log_level=settings.log_level.lower())
-    if ctx.closeable is not None:
-        ctx.closeable.close()
+    try:
+        # The app logs request ID/method/path without query text; the raw access logger
+        # would also record the user's global search terms.
+        uvicorn.run(
+            app,
+            host=args.host,
+            port=args.port,
+            log_level=settings.log_level.lower(),
+            access_log=False,
+        )
+    finally:
+        if ctx.closeable is not None:
+            ctx.closeable.close()
     return 0
 
 
@@ -137,6 +182,7 @@ def cmd_worker(settings: Settings, args: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         stop.set()
     finally:
+        providers.close()
         if closeable is not None:
             closeable.close()
     return 0
@@ -160,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     probe = sub.add_parser("probe", help="run LM Studio capability probes")
     probe.add_argument("--record", action="store_true", help="store the outcome for readiness")
     probe.add_argument("--demo", action="store_true")
+    probe.add_argument("--report", help="write a credential-free JSON probe report")
 
     worker = sub.add_parser("worker", help="run an ingestion worker")
     worker.add_argument("--demo", action="store_true")

@@ -28,8 +28,61 @@ def drain(k) -> None:
         pass
 
 
+def test_job_heartbeat_extends_only_the_current_live_owner(kit):
+    k = kit
+    sub = k.notes.create("Atlas", TEXT, "heartbeat-owner")
+    old = k.store.acquire(NOW, 2)
+    assert k.store.heartbeat_job(old.job_id, old.lease_token, NOW + timedelta(seconds=1), 4)
+    assert k.store.acquire(NOW + timedelta(seconds=3), 2) is None
+    new = k.store.acquire(NOW + timedelta(seconds=6), 2)
+    assert new.job_id == sub.job.job_id and new.lease_token != old.lease_token
+    assert not k.store.heartbeat_job(old.job_id, old.lease_token, NOW + timedelta(seconds=6), 4)
+    assert k.store.get_job(new.job_id).lease_token == new.lease_token
+    assert k.store.heartbeat_job(new.job_id, new.lease_token, NOW + timedelta(seconds=7), 4)
+
+
+def test_job_heartbeat_cannot_revive_an_expired_lease(kit):
+    k = kit
+    k.notes.create("Atlas", TEXT, "heartbeat-expired")
+    old = k.store.acquire(NOW, 1)
+    assert not k.store.heartbeat_job(old.job_id, old.lease_token, NOW + timedelta(seconds=2), 100)
+    assert k.store.acquire(NOW + timedelta(seconds=2), 2).attempt == 2
+
+
+def test_worker_keeps_lease_during_a_provider_call_longer_than_the_initial_lease(kit):
+    import time
+
+    from notes_graphrag.ingestion.worker import Worker
+
+    k = kit
+    sub = k.notes.create("Atlas", TEXT, "heartbeat-slow-model")
+
+    class SlowChat:
+        def chat_json(self, **kwargs):
+            # Leave room for real database round trips on loaded Windows hosts, while
+            # still taking longer than the initial lease on both implementations.
+            time.sleep(8.0)
+            return k.chat.chat_json(**kwargs)
+
+    worker = Worker(
+        k.store,
+        k.settings.model_copy(update={"job_lease_seconds": 6}),
+        SlowChat(),
+        k.emb,
+        k.worker.schema,
+    )
+    worker.run_once()
+    assert k.store.get_job(sub.job.job_id).status == JobStatus.SUCCEEDED
+
+
 def ask(k, q: str):
-    qa = AnswerService(k.knowledge, Retriever(k.knowledge, k.emb, k.settings), k.chat, k.settings)
+    qa = AnswerService(
+        k.knowledge,
+        Retriever(k.knowledge, k.emb, k.settings),
+        k.chat,
+        k.settings,
+        review_answers=False,
+    )
     return qa.ask(q, include_graph=True)
 
 
@@ -151,6 +204,34 @@ def test_retry_failed_job_and_reject_superseded(kit):
     assert k.store.get_job(s1.job.job_id).status == JobStatus.SUCCEEDED
     with pytest.raises(Conflict):
         k.notes.retry(s1.job.job_id)  # succeeded jobs are not retryable
+
+
+def test_changed_pipeline_is_retried_in_a_fresh_revision(kit):
+    from notes_graphrag.ingestion.service import NoteService
+    from notes_graphrag.ingestion.worker import Worker
+
+    k = kit
+    old = k.notes.create("T", TEXT, "old-profile")
+    settings = k.settings.model_copy(update={"chat_temperature": 0.7})
+    worker = Worker(k.store, settings, k.chat, k.emb, k.worker.schema, lambda: NOW)
+    worker.run_once()
+    assert k.store.get_job(old.job.job_id).error_code == "PIPELINE_CHANGED"
+    service = NoteService(k.store, settings, lambda: NOW)
+    current = service.retry(old.job.job_id)
+    assert current.revision_id != old.revision.revision_id
+    assert k.store.get_revision(old.revision.revision_id).status == RevisionStatus.FAILED
+    assert k.store.get_revision(current.revision_id).fingerprint != old.revision.fingerprint
+    worker.run_once()
+    assert k.store.get_note(old.note.note_id).active_revision_id == current.revision_id
+
+
+def test_note_without_ontology_relationships_is_still_searchable(kit):
+    k = kit
+    sub = k.notes.create("Receipt", "The receipt was signed on Friday.", "plain-note")
+    drain(k)
+    assert k.store.get_job(sub.job.job_id).status == JobStatus.SUCCEEDED
+    assert k.knowledge.claims_for_note(sub.note.note_id) == []
+    assert k.knowledge.lexical_candidates("receipt Friday", 5)
 
 
 def test_expired_lease_is_reclaimed_and_cannot_write(kit):

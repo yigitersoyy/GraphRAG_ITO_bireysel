@@ -14,7 +14,7 @@ from typing import Any
 from notes_graphrag.core.config import Settings
 from notes_graphrag.core.errors import AppError
 from notes_graphrag.providers.lmstudio_provider import LMStudioProvider
-from notes_graphrag.retrieval.vector import QUERY_TEMPLATE_V1, cosine, format_query
+from notes_graphrag.retrieval.vector import cosine, format_query
 
 _PROBE_SCHEMA = {
     "type": "object",
@@ -56,18 +56,24 @@ def _run(name: str, fn: Callable[[], str]) -> ProbeResult:
 
 
 def run_probes(
-    provider: LMStudioProvider | Any, settings: Settings, query_template: str = QUERY_TEMPLATE_V1
+    provider: LMStudioProvider | Any,
+    settings: Settings,
+    query_template: str | None = None,
+    *,
+    embedding_provider: Any = None,
 ) -> list[ProbeResult]:
     """Run the probes. Pass a GatedLM in the running system so diagnostics share the slot."""
     results: list[ProbeResult] = []
+    emb = embedding_provider if embedding_provider is not None else provider
+    template = query_template if query_template is not None else settings.embedding_query_template
+    chat_models = list(dict.fromkeys((settings.extraction_model, settings.answer_model)))
 
     def models() -> str:
         ids = set(provider.list_models())
-        missing = [
-            m
-            for m in (settings.extraction_model, settings.answer_model, settings.embedding_model)
-            if not m or m not in ids
-        ]
+        emb_ids = set(emb.list_models()) if emb is not provider else ids
+        missing = [m for m in chat_models if not m or m not in ids]
+        if not settings.embedding_model or settings.embedding_model not in emb_ids:
+            missing.append(settings.embedding_model)
         if missing:
             raise AppError(f"configured model id not served: {missing}", code="MODEL_MISSING")
         return f"{len(ids)} models listed"
@@ -77,35 +83,35 @@ def run_probes(
         return results  # later probes would only repeat the same failure
 
     def chat() -> str:
-        for prompt in ("Reply with the single word: ok.", "Tek kelimeyle yanıtla: tamam."):
-            provider.chat_text(
-                model=settings.extraction_model, system="Be brief.", user=prompt, max_tokens=64
-            )
-        return "english and turkish completions returned"
+        for model in chat_models:
+            for prompt in ("Reply with the single word: ok.", "Tek kelimeyle yanıtla: tamam."):
+                provider.chat_text(model=model, system="Be brief.", user=prompt, max_tokens=64)
+        return f"english and turkish completions returned for {len(chat_models)} chat models"
 
     def schema() -> str:
-        raw = provider.chat_json(
-            model=settings.extraction_model,
-            system="Return the requested JSON object.",
-            user="Set ready to true.",
-            schema_name="capability_probe",
-            schema=_PROBE_SCHEMA,
-            max_tokens=64,
-        )
-        if json.loads(raw) != {"ready": True}:
-            raise AppError("strict schema output did not match", code="SCHEMA_FAILURE")
-        return "strict json_schema accepted"
+        for model in chat_models:
+            raw = provider.chat_json(
+                model=model,
+                system="Return the requested JSON object.",
+                user="Set ready to true.",
+                schema_name="capability_probe",
+                schema=_PROBE_SCHEMA,
+                max_tokens=64,
+            )
+            if json.loads(raw) != {"ready": True}:
+                raise AppError("strict schema output did not match", code="SCHEMA_FAILURE")
+        return f"strict json_schema accepted by {len(chat_models)} chat models"
 
     def embeddings() -> str:
-        one = provider.embed(["probe"])
-        batch = provider.embed(FIXTURE_DOCS)
+        one = emb.embed([settings.embedding_document_prefix + "probe"])
+        batch = emb.embed([settings.embedding_document_prefix + d for d in FIXTURE_DOCS])
         if len(one) != 1 or len(batch) != len(FIXTURE_DOCS):
             raise AppError("embedding count mismatch", code="EMBEDDINGS_UNSUPPORTED")
         return f"dimension {len(one[0])} verified"
 
     def retrieval() -> str:
-        docs = provider.embed(FIXTURE_DOCS)
-        (q,) = provider.embed([format_query(query_template, FIXTURE_QUERY)])
+        docs = emb.embed([settings.embedding_document_prefix + d for d in FIXTURE_DOCS])
+        (q,) = emb.embed([format_query(template, FIXTURE_QUERY)])
         sims = [cosine(q, d) for d in docs]
         if not sims[0] > max(sims[1:]):  # strictly first; a tie proves nothing
             raise AppError("expected passage not ranked first", code="RETRIEVAL_FIXTURE_FAILED")
@@ -127,12 +133,23 @@ def profile_fingerprint(settings: Settings) -> str:
     import hashlib
 
     parts = [
+        "probe-v3",
+        settings.lm_studio_instance_id,
+        settings.llm_base_url.rstrip("/"),
+        settings.embedding_base_url.rstrip("/"),
         settings.extraction_model,
         settings.answer_model,
+        str(settings.chat_temperature),
+        settings.llm_instruction_suffix,
+        str(settings.chat_template_enable_thinking),
         settings.embedding_model,
         str(settings.embedding_dimensions),
         settings.embedding_profile,
         str(settings.lm_studio_context_tokens),
-        hashlib.sha256(QUERY_TEMPLATE_V1.encode()).hexdigest()[:16],
+        str(settings.max_context_tokens),
+        str(settings.extraction_max_output_tokens),
+        str(settings.answer_max_output_tokens),
+        settings.embedding_document_prefix,
+        hashlib.sha256(settings.embedding_query_template.encode()).hexdigest()[:16],
     ]
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:24]

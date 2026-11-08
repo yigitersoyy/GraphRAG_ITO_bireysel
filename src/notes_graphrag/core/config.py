@@ -5,6 +5,8 @@ from __future__ import annotations
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from notes_graphrag.retrieval.vector import QUERY_TEMPLATE_V1
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -27,18 +29,24 @@ class Settings(BaseSettings):
     lm_studio_api_key: SecretStr | None = None
     extraction_model: str = ""
     answer_model: str = ""
+    chat_temperature: float = Field(default=0.0, ge=0, le=2)
+    llm_instruction_suffix: str = ""
+    chat_template_enable_thinking: bool | None = None
     embedding_provider: str = "lmstudio"
     embedding_base_url: str = "http://127.0.0.1:1234/v1"
     embedding_api_key: SecretStr | None = None
     embedding_model: str = ""
     embedding_dimensions: int = 1024
     embedding_profile: str = "qwen3-embedding-0.6b-local-v1"
+    embedding_query_template: str = QUERY_TEMPLATE_V1
+    embedding_document_prefix: str = ""
     lm_studio_context_tokens: int = 8192
     extraction_max_output_tokens: int = 2048
     answer_max_output_tokens: int = 1024
 
     max_note_bytes: int = 1_048_576
     max_note_chars: int = 100_000
+    max_upload_bytes: int = 10 * 1024 * 1024
     max_request_bytes: int = 2 * 1024 * 1024
     max_title_chars: int = 200
     max_chunks_per_note: int = 128
@@ -73,4 +81,32 @@ class Settings(BaseSettings):
             raise ValueError("MAX_CONTEXT_TOKENS plus output reserve exceeds loaded context")
         if self.chunk_overlap_tokens >= self.chunk_target_tokens:
             raise ValueError("chunk overlap must be smaller than chunk target")
+        if "{question}" not in self.embedding_query_template:
+            raise ValueError("EMBEDDING_QUERY_TEMPLATE must contain {question}")
+        if self.store_backend not in ("memory", "neo4j"):
+            raise ValueError("STORE_BACKEND must be memory or neo4j")
+        if (
+            min(
+                self.provider_timeout_seconds,
+                self.question_timeout_seconds,
+                self.job_lease_seconds,
+                self.inference_slot_wait_seconds,
+            )
+            <= 0
+        ):
+            raise ValueError("timeouts and lease durations must be positive")
         return self
+
+    def require_live_models(self) -> None:
+        from notes_graphrag.core.errors import DependencyUnavailable
+
+        missing = [
+            name
+            for name in ("extraction_model", "answer_model", "embedding_model")
+            if not getattr(self, name).strip()
+        ]
+        if missing:
+            raise DependencyUnavailable(
+                "Set exact served model IDs: " + ", ".join(n.upper() for n in missing),
+                code="CONFIG_MISSING",
+            )
