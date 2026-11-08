@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -56,6 +57,25 @@ def main() -> int:
         )
         if found.strip():
             ap.error("Restore target contains data; create a fresh container/volume")
+    if args.action == "backup":
+        # A bind directory created by root on Linux must be writable by Neo4j's UID.
+        # Limit ownership changes to the explicit backup directory, never its parents.
+        if os.name != "nt" and os.geteuid() == 0:
+            os.chown(directory, 7474, 7474)
+        try:
+            docker(
+                "run",
+                "--rm",
+                "--entrypoint",
+                "sh",
+                "--mount",
+                f"type=bind,source={directory},target=/backups",
+                image,
+                "-c",
+                "test -w /backups",
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError("Backup directory must be writable by Neo4j UID 7474") from exc
     if running:
         docker("stop", args.container)
     try:

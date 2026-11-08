@@ -12,8 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from notes_graphrag.api.common import ctx_of, ok
-from notes_graphrag.api.routes.graph import _edges
-from notes_graphrag.api.views import decode_cursor, encode_cursor, iso, job_view
+from notes_graphrag.api.views import decode_cursor, encode_cursor, graph_edges, iso, job_view
 from notes_graphrag.core.errors import BadRequest
 from notes_graphrag.persistence.base import Store
 from notes_graphrag.persistence.workspace import COLORS, CatalogEntry, fold
@@ -172,7 +171,7 @@ def note_map(
     links, edges_limited = store.workspace_links([e.note.note_id for e in entries], 600)
     selected = [e.note.note_id for e in entries]
     claims = ctx_of(request).knowledge.claims_for_notes(selected, 151)
-    entities, relations, relations_limited = _edges(claims)
+    entities, relations, relations_limited = graph_edges(claims)
     return ok(
         request,
         dict(

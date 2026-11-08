@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import re
 from typing import Any
 
@@ -83,12 +82,6 @@ def _claim(s: str, p: str, o: str, a: int, b: int, text: str) -> dict[str, Any]:
         "modality": "ASSERTED",
         "evidence": {"start": a, "end": b, "quote": text[a:b]},
     }
-
-
-def cosine(a: list[float], b: list[float]) -> float:
-    return sum(x * y for x, y in zip(a, b, strict=True)) / (
-        math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
-    )
 
 
 class DemoChat:

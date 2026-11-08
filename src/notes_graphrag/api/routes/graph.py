@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 from notes_graphrag.api.common import ctx_of, ok
-from notes_graphrag.api.views import decode_cursor, encode_cursor
+from notes_graphrag.api.views import MAX_GRAPH_EDGES, decode_cursor, encode_cursor, graph_edges
 from notes_graphrag.core.errors import BadRequest, NotFound
 from notes_graphrag.ingestion.entity_resolution import normalize_name
 from notes_graphrag.retrieval.graph import Limits, expand
-from notes_graphrag.retrieval.source import ClaimRecord
 
-MAX_NODES, MAX_EDGES = 100, 150
 router = APIRouter(prefix="/api/v1")
 
 
@@ -43,40 +41,6 @@ def entities(
     return ok(request, {"items": items, "next_cursor": nxt})
 
 
-def _edges(
-    claims: list[ClaimRecord],
-) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]], bool]:
-    nodes: dict[str, dict[str, Any]] = {}
-    edges: list[dict[str, Any]] = []
-    limited = len(claims) > MAX_EDGES
-    for c in claims[:MAX_EDGES]:
-        new = {c.subject_id, c.object_id} - nodes.keys()
-        if len(nodes) + len(new) > MAX_NODES:
-            limited = True
-            continue
-        nodes[c.subject_id] = {"id": c.subject_id, "label": c.subject}
-        nodes[c.object_id] = {"id": c.object_id, "label": c.object}
-        edges.append(
-            {
-                "id": c.claim_id,
-                "source": c.subject_id,
-                "target": c.object_id,
-                "predicate": c.predicate,
-                "polarity": c.polarity,
-                "modality": c.modality,
-                "evidence": {
-                    "note_id": c.note_id,
-                    "revision_id": c.revision_id,
-                    "title": c.title,
-                    "start_char": c.evidence_start,
-                    "end_char": c.evidence_end,
-                    "quote": c.evidence_quote,
-                },
-            }
-        )
-    return nodes, edges, limited
-
-
 @router.get("/graph")
 def graph(
     request: Request,
@@ -92,12 +56,14 @@ def graph(
             raise NotFound("entity not found")
         claims = [
             x.claim
-            for x in expand(src, [entity_id], Limits(max_hops=hops, total_claims=MAX_EDGES + 1))
+            for x in expand(
+                src, [entity_id], Limits(max_hops=hops, total_claims=MAX_GRAPH_EDGES + 1)
+            )
         ]
     else:
         assert note_id is not None
         if src.note_active_chunks(note_id) == 0:
             raise NotFound("note not found or not indexed")
         claims = src.claims_for_note(note_id)
-    nodes, edges, limited = _edges(claims)
+    nodes, edges, limited = graph_edges(claims)
     return ok(request, {"nodes": list(nodes.values()), "edges": edges, "limited": limited})

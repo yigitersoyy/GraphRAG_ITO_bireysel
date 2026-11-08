@@ -10,6 +10,9 @@ from notes_graphrag.core.errors import BadRequest
 from notes_graphrag.domain.state_machines import JobStatus, RevisionStatus
 from notes_graphrag.persistence.base import Store
 from notes_graphrag.persistence.models import Job, Note
+from notes_graphrag.retrieval.source import ClaimRecord
+
+MAX_GRAPH_NODES, MAX_GRAPH_EDGES = 100, 150
 
 
 def iso(dt: datetime | None) -> str | None:
@@ -76,3 +79,37 @@ def note_view(store: Store, note: Note) -> dict[str, Any]:
         ),
         "job": job_view(job) if job else None,
     }
+
+
+def graph_edges(
+    claims: list[ClaimRecord],
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]], bool]:
+    nodes: dict[str, dict[str, Any]] = {}
+    edges: list[dict[str, Any]] = []
+    limited = len(claims) > MAX_GRAPH_EDGES
+    for c in claims[:MAX_GRAPH_EDGES]:
+        new = {c.subject_id, c.object_id} - nodes.keys()
+        if len(nodes) + len(new) > MAX_GRAPH_NODES:
+            limited = True
+            continue
+        nodes[c.subject_id] = {"id": c.subject_id, "label": c.subject}
+        nodes[c.object_id] = {"id": c.object_id, "label": c.object}
+        edges.append(
+            {
+                "id": c.claim_id,
+                "source": c.subject_id,
+                "target": c.object_id,
+                "predicate": c.predicate,
+                "polarity": c.polarity,
+                "modality": c.modality,
+                "evidence": {
+                    "note_id": c.note_id,
+                    "revision_id": c.revision_id,
+                    "title": c.title,
+                    "start_char": c.evidence_start,
+                    "end_char": c.evidence_end,
+                    "quote": c.evidence_quote,
+                },
+            }
+        )
+    return nodes, edges, limited

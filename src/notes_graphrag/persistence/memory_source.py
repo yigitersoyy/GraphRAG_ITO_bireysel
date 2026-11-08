@@ -2,28 +2,16 @@
 
 from __future__ import annotations
 
-import math
-import re
-
 from notes_graphrag.domain.state_machines import RevisionStatus
 from notes_graphrag.persistence.memory import MemoryStore
 from notes_graphrag.persistence.models import Revision, StagedChunk
 from notes_graphrag.retrieval.lexical import query_terms, tokens
 from notes_graphrag.retrieval.source import ChunkRecord, ClaimRecord, EntityRecord
-
-_WORD = re.compile(r"\w+")
+from notes_graphrag.retrieval.vector import cosine
 
 
 def _tokens(text: str) -> set[str]:
     return set(tokens(text))
-
-
-def _cos(a: list[float] | tuple[float, ...], b: tuple[float, ...]) -> float:
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(y * y for y in b))
-    if na == 0 or nb == 0 or len(a) != len(b):
-        return 0.0
-    return sum(x * y for x, y in zip(a, b, strict=True)) / (na * nb)
 
 
 class MemoryKnowledge:
@@ -60,7 +48,7 @@ class MemoryKnowledge:
         )
 
     def vector_candidates(self, vec: list[float], k: int) -> list[tuple[str, float]]:
-        scored = [(cid, _cos(vec, sc.embedding)) for cid, (_, sc) in self._active().items()]
+        scored = [(cid, cosine(vec, sc.embedding)) for cid, (_, sc) in self._active().items()]
         scored.sort(key=lambda x: (-x[1], x[0]))
         return scored[:k]
 
