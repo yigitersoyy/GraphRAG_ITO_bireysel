@@ -42,8 +42,8 @@ export function DeletedNotes({ revision }: { revision: string }) {
       <h1 className="section-title">Silinenler</h1>
       <p className="form-hint">
         Bu kayıtlar normal not listesinde, graf ve arama sonuçlarında
-        gösterilmez. İçeriği saklama süresi sonunda temizlenmiş kayıtlarda belge
-        adı da kaldırılır.
+        gösterilmez. Belge adı ve silinme tarihi burada kalır; içerik mevcut
+        saklama süresinin sonunda temizlenir.
       </p>
       {error && (
         <ErrorMessage message={error} retry={() => setRetry((n) => n + 1)} />

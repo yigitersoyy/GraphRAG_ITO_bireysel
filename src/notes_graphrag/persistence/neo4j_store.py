@@ -1049,7 +1049,7 @@ class Neo4jStore:
         idem_cutoff = to_iso(now - timedelta(days=idempotency_retention_days))
 
         def fn(tx: ManagedTransaction) -> dict[str, int]:
-            # Content of deleted notes (revisions, chunks, claims, jobs); the tombstone stays.
+            # Source content is removed; title and deletion timestamp stay in the Deleted list.
             rows = tx.run(
                 """
                 MATCH (n:Note {workspace_id: $ws})
@@ -1067,7 +1067,7 @@ class Neo4jStore:
                 DETACH DELETE j
                 WITH n, nrev, ncl, count(j) AS njobs
                 WHERE nrev > 0 OR ncl > 0 OR njobs > 0
-                SET n.title = '', n.desired_revision_id = '', n.active_revision_id = null
+                SET n.desired_revision_id = '', n.active_revision_id = null
                 RETURN sum(nrev) AS revisions, sum(ncl) AS claims
                 """,
                 ws=ws,

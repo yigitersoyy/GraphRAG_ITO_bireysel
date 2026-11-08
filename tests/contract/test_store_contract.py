@@ -413,6 +413,7 @@ def test_purge_removes_deleted_content_but_keeps_replay_protection(kit):
     assert k.knowledge.claims_for_note(s.note.note_id) == []
     assert k.knowledge.note_active_chunks(s.note.note_id) == 0
     assert k.store.get_note(s.note.note_id).deleted_at is not None  # tombstone remains
+    assert k.store.get_note(s.note.note_id).title == "T"  # persistent Deleted-list metadata
     with pytest.raises(NoteDeleted):  # replay answers NOTE_DELETED; it must not create a note
         k.notes.create("T", TEXT, "purge-key")
     assert k.store.list_notes(None, 100)[0] == []

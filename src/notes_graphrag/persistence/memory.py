@@ -512,8 +512,8 @@ class MemoryStore:
         idempotency_retention_days: float,
     ) -> dict[str, int]:
         """Remove source content of notes deleted before the content cutoff, orphan entities,
-        and idempotency records older than their retention. Note tombstones remain, so a delayed
-        replay of a deleted note's request still answers NOTE_DELETED (architecture 7.2, 7.3)."""
+        and idempotency records older than their retention. Note titles/tombstones remain.
+        A delayed replay still answers NOTE_DELETED (architecture 7.2, 7.3)."""
         content_cutoff = now - timedelta(days=content_retention_days)
         idem_cutoff = now - timedelta(days=idempotency_retention_days)
         counts = {"revisions": 0, "claims": 0, "entities": 0, "idempotency": 0}
@@ -534,7 +534,7 @@ class MemoryStore:
                 for jid in [j.job_id for j in self.jobs.values() if j.note_id == note.note_id]:
                     del self.jobs[jid]
                 self.notes[note.note_id] = replace(
-                    note, title="", desired_revision_id="", active_revision_id=None
+                    note, desired_revision_id="", active_revision_id=None
                 )
             used = {mc.subject_id for mc in self.claims.values()}
             used |= {mc.object_id for mc in self.claims.values()}

@@ -121,14 +121,22 @@ Yeni salt okunur API: `GET /api/v1/workspace/deleted-notes?limit=50&cursor=...`.
 Yalnızca `note_id`, `title`, `deleted_at`, `content_purged` ve sayfalama bilgisi
 döner; içerik veya eski kaynak metinleri açılmaz. En yeni silinenler önce gelir;
 aynı zaman damgasında kimlik sıralaması ve cursor sınırları iki store'da eşittir.
-Migration, silme davranışı ve saklama süresi değiştirilmedi. Mevcut içerik
-temizliği sonrası adı silinen tombstone'lar **İçeriği temizlenmiş not** olarak görünür.
+Migration ve kaynak içerik saklama süresi değiştirilmedi. Sonraki kullanıcı isteğiyle
+belge adı ve silinme tarihi içerik temizliğinden sonra da Silinenler'de korunur.
+Önceden adı temizlenmiş eski tombstone'lar **İçeriği temizlenmiş not** olarak görünür;
+bu eski adlar otomatik olarak yeniden oluşturulmaz. Normal katalog, arama, graf ve
+soru kaynakları silinmiş kayıtları hem içerik temizliğinden önce hem sonra dışlar.
 Geri yükleme veya kalıcı silme düğmesi bu kapsamda eklenmedi.
 
 Memory/Neo4j katalog ve store sözleşmeleri dahil 80 test geçti. Mobil görünümde
 silinenler listesi, normal listeye dönüş ve aramada bulunmama dahil 13 tarayıcı
 testi ve 5 Vitest testi geçti. Canlı API'de ilgili iki kaydın yalnızca Silinenler'de
 olduğu, arama ve Düzenlenmemiş sonuçlarına girmediği doğrulandı. Ruff ve mypy geçti.
+
+Sonraki kalıcılık düzeltmesi: otomatik içerik temizliği yalnızca kaynak revizyonları,
+chunk/claim ve iş içeriklerini kaldırır; belge başlığı ve silinme tarihi korunur.
+Memory/Neo4j üzerinde 10 silme, saklama süresi ve tekrar gönderim koruması testi geçti.
+İçeriği temizlenmiş bir kayıt normal not, arama veya graf kaynağı haline gelemez.
 
 `backups/cleanup-c7c8f04/` ve `reports/` yalnızca yerelde tutulur. Tam yedek,
 okunabilir dışa aktarımın yerine geçmediği gibi dışa aktarım da tam yedek değildir.

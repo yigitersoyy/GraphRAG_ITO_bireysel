@@ -47,4 +47,10 @@ def test_deleted_pagination_survives_equal_timestamps_and_content_retention(stac
     stack.ctx.store.purge(stamp + timedelta(days=2), 1, 30)
     purged = stack.client.get("/api/v1/workspace/deleted-notes").json()
     assert purged["total"] == 3
-    assert all(n["content_purged"] and not n["title"] for n in purged["items"])
+    assert all(n["content_purged"] and n["title"].startswith("Trash ") for n in purged["items"])
+    assert {n["note_id"] for n in purged["items"]} == set(ids)
+    for id in ids:
+        assert stack.client.get("/api/v1/notes/" + id).status_code == 404
+    assert stack.client.get("/api/v1/search?q=Trash").json()["items"] == []
+    assert stack.client.get("/api/v1/workspace/notes?topic_id=unsorted").json()["total"] == 0
+    assert stack.client.get("/api/v1/workspace/map").json()["nodes"] == []
