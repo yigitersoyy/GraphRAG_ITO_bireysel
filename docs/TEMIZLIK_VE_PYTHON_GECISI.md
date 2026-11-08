@@ -144,7 +144,29 @@ Canlı Compose projesi ve volume adı değiştirilmez. Migration 001–005, mevc
 belgeler, model/embedding profili ve işlem geçmişi korunur. Başarısız eski işler
 kendiliğinden yeniden denenmez. `.vscode` yerel ayarları kapsam dışındadır.
 
-## NiceGUI kabul kapısı
+## Güncel graf görünümü
+
+Graf yenilemesi öncesinde `ef32101` commit'iyle geri dönüş noktası oluşturuldu.
+Referans görsele göre zemin antrasit (`#1E2126`), konu/seri merkezleri sarı,
+belgeler küçük mavi/turkuaz ve varlıklar mor noktalardır. İnce bağlantılar gerçek
+ilişkileri gösterir; bağlantısız bileşenler sahte ilişki eklenmeden birlikte yerleştirilir.
+Etiketler üzerine gelince, seçilince veya yakınlaşınca açılır. Sol üstteki
+Filtreler/Görünüm alanından merkezler, bağlantılar, etiketler, yön okları,
+düğüm boyutu ve çizgi görünürlüğü ayarlanır. Kamera ve sürüklenen konumlar korunur.
+
+Canlı haritada 94 aktif not vardır; çıkarılmış varlık veya ilişki bulunmadığından
+referanstaki yoğunluk sahte veriyle üretilmez. Mevcut konu/seri bağlantıları kullanılır.
+Soru kaynaklarının vurgulanması ve ilgisiz düğümlerin sönükleşmesi korunur.
+Silinenler normal arama, graf ve soru kaynaklarına dahil edilmez.
+
+14 Playwright senaryosu (mobil, arama/silinenler, kaynaklar, yükleme, taşıma,
+kamera ve yeni görünüm kontrolleri dahil), 5 Vitest testi ve üretim derlemesi geçti.
+300 not/600 bağlantı senaryosundaki yerel pan örneklemesinde p95 7,1 ms ölçüldü;
+bu bağımsız bir cihazlar arası performans karşılaştırması değildir. Canlı UI ayrıca
+salt okunur tarayıcı kontrolüyle doğrulandı. Yalnızca Docker UI servisi yenilendi;
+API/worker, model, veri ve şema değiştirilmedi.
+
+## NiceGUI kabul kapısı (geçiş değerlendirmesinin tarihsel ölçütleri)
 
 1440×960 ve 360×800 görünüm; siyah zemin, ana/alt düğüm boyutu ve kaynak vurgusu;
 not/konu/seri/varlık grafı, kamera, sürükleme, arama, kaynak ve yükleme akışları.

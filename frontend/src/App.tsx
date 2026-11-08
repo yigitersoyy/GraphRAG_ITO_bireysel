@@ -596,6 +596,8 @@ export default function App() {
               onClearFocus={() => setAnswerFocus(null)}
               showTopics={showTopics}
               showLinks={showLinks}
+              onShowTopics={setShowTopics}
+              onShowLinks={setShowLinks}
               visible={view === "graph"}
               onNote={(id) => openNote(id)}
               onTopic={chooseTopic}
@@ -655,7 +657,7 @@ export default function App() {
                     >
                       <span
                         className="color-dot"
-                        style={{ background: "#EF7077" }}
+                        style={{ background: "#E5EA86" }}
                       />
                       {t.name}
                     </button>

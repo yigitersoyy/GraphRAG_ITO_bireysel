@@ -2,10 +2,10 @@ import type { Core } from "cytoscape";
 import type { Answer } from "./types";
 
 export function nodeSize(kind: string, degree: number): number {
-  if (kind === "topic") return Math.min(140, 108 + Math.sqrt(degree) * 6);
-  if (kind === "collection") return Math.min(124, 94 + Math.sqrt(degree) * 5);
-  if (kind === "entity") return Math.min(108, 58 + Math.sqrt(degree) * 8);
-  return 52;
+  if (kind === "topic") return Math.min(26, 15 + Math.sqrt(degree) * 1.6);
+  if (kind === "collection") return Math.min(19, 9 + Math.sqrt(degree) * 1.1);
+  if (kind === "entity") return Math.min(15, 3 + Math.sqrt(degree) * 1.2);
+  return 4.2;
 }
 
 // Keep source documents and their own hubs visible, without lighting up siblings.

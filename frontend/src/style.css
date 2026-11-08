@@ -25,7 +25,7 @@
   }
   .graph-view,
   .reference-graph {
-    background: #000000;
+    background: #1e2126;
   }
   .graph-view .empty-state {
     color: #e3e7ec;
@@ -40,18 +40,18 @@
   .graph-types {
     position: absolute;
     top: 14px;
-    left: 16px;
+    right: 18px;
     display: flex;
-    gap: 16px;
+    gap: 12px;
     z-index: 2;
     pointer-events: none;
-    font-size: 12px;
+    font-size: 11px;
     color: #aab5c3;
   }
   .answer-graph-focus {
     position: absolute;
     top: 43px;
-    left: 16px;
+    left: 185px;
     right: 16px;
     z-index: 3;
     display: flex;
@@ -63,16 +63,17 @@
     pointer-events: none;
   }
   .answer-graph-focus span {
-    background: #000000ee;
+    background: #1e2126ee;
     padding: 4px 0;
   }
   .answer-graph-focus button {
     color: #8acaff;
-    background: #000000;
+    background: #1e2126;
     pointer-events: auto;
   }
   .reference-graph[data-answer-focus="true"] ~ .map-limit {
-    top: 104px;
+    top: auto;
+    bottom: 140px;
   }
   .graph-types span {
     display: flex;
@@ -80,18 +81,58 @@
     gap: 6px;
   }
   .graph-view .map-limit {
-    top: 44px;
-    background: #151a20ee;
+    top: auto;
+    bottom: 140px;
+    max-width: min(560px, calc(100% - 32px));
+    background: #2b3038ee;
     color: #c2cbd6;
     border-color: #394452;
   }
   .graph-types i {
-    height: 10px;
-    width: 10px;
+    height: 6px;
+    width: 6px;
     border-radius: 50%;
   }
   .graph-view .graph-legend .color-dot {
-    background: #ef7077;
+    background: #e5ea86;
+  }
+  .graph-settings {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    z-index: 5;
+    width: 150px;
+    background: #34383de8;
+    border: 1px solid #69717c55;
+    border-radius: 5px;
+    padding: 4px 8px;
+    color: #b6c3cd;
+    font-size: 11px;
+  }
+  .graph-settings summary {
+    padding: 4px 0;
+    color: #75bdce;
+    cursor: pointer;
+  }
+  .graph-settings label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 0;
+  }
+  .graph-settings input[type="checkbox"] {
+    accent-color: #b9d67b;
+  }
+  .graph-settings .graph-range {
+    display: block;
+    margin-top: 4px;
+  }
+  .graph-settings input[type="range"] {
+    display: block;
+    width: 100%;
+    margin: 6px 0;
+    padding: 0;
+    accent-color: #b9d67b;
   }
   .bulk-upload h2 {
     margin: 0 0 12px;

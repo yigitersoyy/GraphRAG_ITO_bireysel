@@ -15,6 +15,13 @@ import type {
   SharedEdge,
 } from "./types";
 import { applyAnswerFocus, nodeSize } from "./graphFocus";
+import {
+  graphPalette,
+  graphStyle,
+  pointColor,
+  fitOverview,
+  packComponents,
+} from "./graphTheme";
 
 export const colors: Record<string, string> = {
   purple: "#A683C9",
@@ -39,6 +46,8 @@ type Props = {
   selected: string | null;
   answerFocus: Answer | null;
   onClearFocus(): void;
+  onShowTopics(value: boolean): void;
+  onShowLinks(value: boolean): void;
   showTopics: boolean;
   showLinks: boolean;
   visible: boolean;
@@ -59,7 +68,11 @@ const anchors = [
 ];
 const hash = (s: string) =>
   [...s].reduce((n, c) => (n * 31 + c.charCodeAt(0)) >>> 0, 0);
-const roleColors = { topic: "#EF7077", note: "#65B9EE", entity: "#526779" };
+const roleColors = {
+  topic: graphPalette.hub,
+  note: graphPalette.note,
+  entity: graphPalette.entity,
+};
 const caption = (text: string) => {
   const value = text.replace(/_/g, " ");
   return value.length > 42 ? value.slice(0, 39) + "…" : value;
@@ -73,6 +86,23 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
     firstFit = useRef(false);
   const structure = useRef("");
   const [seriesCount, setSeriesCount] = useState(0);
+  const [showLabels, setShowLabels] = useState(false);
+  const [showArrows, setShowArrows] = useState(false);
+  const [nodeScale, setNodeScale] = useState(1);
+  const [lineOpacity, setLineOpacity] = useState(0.24);
+  const display = useRef({ labels: false, arrows: false });
+  display.current = { labels: showLabels, arrows: showArrows };
+  const syncDisplay = () => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.batch(() => {
+      cy.elements().toggleClass(
+        "labels-visible",
+        display.current.labels || cy.zoom() >= 1.65,
+      );
+      cy.edges().toggleClass("show-arrows", display.current.arrows);
+    });
+  };
   const [focusCounts, setFocusCounts] = useState({ highlighted: 0, dimmed: 0 });
   const cameras = useRef(new Map<string, { pan: Point; zoom: number }>()),
     layer = useRef("notes");
@@ -86,7 +116,7 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
     if (!node.length) return;
     cy.resize();
     const p = node.position(),
-      zoom = Math.max(cy.zoom(), 1);
+      zoom = Math.max(cy.zoom(), 2.2);
     cy.viewport({
       zoom,
       pan: { x: cy.width() / 2 - p.x * zoom, y: cy.height() / 2 - p.y * zoom },
@@ -100,7 +130,7 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
   } | null>(null);
   useImperativeHandle(ref, () => ({
     fit: () => {
-      cyRef.current?.fit(undefined, 90);
+      if (cyRef.current) fitOverview(cyRef.current);
     },
     focus: (id) => {
       pendingFocus.current = id;
@@ -115,7 +145,7 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
       const cy = cyRef.current;
       if (cy)
         cy.zoom({
-          level: Math.max(0.2, Math.min(3, cy.zoom() + delta)),
+          level: Math.max(0.2, Math.min(8, cy.zoom() + delta)),
           renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 },
         });
     },
@@ -126,155 +156,14 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
       container: host.current,
       elements: [],
       minZoom: 0.15,
-      maxZoom: 3.5,
+      maxZoom: 8,
       wheelSensitivity: 0.22,
       boxSelectionEnabled: false,
-      style: [
-        {
-          selector: "node",
-          style: {
-            label: "data(caption)",
-            color: "#18364C",
-            "font-family": "Segoe UI, sans-serif",
-            "font-size": 8.5,
-            "text-valign": "center",
-            "text-halign": "center",
-            "text-margin-y": 0,
-            "background-color": "data(color)",
-            width: "data(size)",
-            height: "data(size)",
-            "text-wrap": "wrap",
-            "text-max-width": "45px",
-            "border-width": 1,
-            "border-color": "#FFFFFF",
-          },
-        },
-        {
-          selector: 'node[kind = "topic"]',
-          style: {
-            "font-size": 13,
-            color: "#421E25",
-            "font-weight": 500,
-            "z-index": 3,
-            "text-wrap": "wrap",
-            "text-max-width": "92px",
-          },
-        },
-        {
-          selector: "edge",
-          style: {
-            width: 0.8,
-            "line-color": "#ADB8C6",
-            opacity: 0.8,
-            "curve-style": "bezier",
-            label: "data(label)",
-            "font-size": 8,
-            color: "#BCC7D4",
-            "text-rotation": "autorotate",
-            "text-background-color": "#000000",
-            "text-background-opacity": 0.9,
-            "text-background-padding": "2px",
-            "target-arrow-shape": "triangle",
-            "target-arrow-color": "#ADB8C6",
-            "arrow-scale": 0.55,
-          },
-        },
-        {
-          selector: 'edge[kind = "membership"]',
-          style: { "line-color": "#B9C2CE", opacity: 0.75, width: 0.8 },
-        },
-        {
-          selector: 'node[kind = "note"]',
-          style: {
-            "border-width": 1,
-            "border-color": "data(color)",
-            label: "data(caption)",
-          },
-        },
-        {
-          selector: "node.selected",
-          style: {
-            "border-color": "#163E61",
-            "border-width": 2.5,
-            "border-opacity": 1,
-            label: "data(caption)",
-            "z-index": 10,
-          },
-        },
-        { selector: "node.focused", style: { label: "data(caption)" } },
-        { selector: ".dimmed", style: { opacity: 0.26, "text-opacity": 0.35 } },
-        {
-          selector: "edge.selected",
-          style: { opacity: 0.95, width: 1.5, "line-color": "#C6CAD2" },
-        },
-        {
-          selector: 'edge[kind = "claim"]',
-          style: {
-            label: "data(label)",
-            "font-size": 12,
-            color: "#BCC7D4",
-            "text-background-color": "#000000",
-            "text-background-opacity": 1,
-            "text-background-padding": "5px",
-            "target-arrow-shape": "triangle",
-            "target-arrow-color": "#AAAAAA",
-            "curve-style": "bezier",
-            opacity: 0.75,
-            width: 1.3,
-          },
-        },
-        {
-          selector: 'edge[polarity = "NEGATED"]',
-          style: {
-            "line-style": "dashed",
-            "line-color": "#D7AC7B",
-            "target-arrow-color": "#D7AC7B",
-          },
-        },
-        {
-          selector: 'node[kind = "entity"], node[kind = "collection"]',
-          style: {
-            "font-size": 10,
-            color: "#FFFFFF",
-            "text-max-width": "76px",
-            "text-margin-y": 0,
-          },
-        },
-        {
-          selector: "node.answer-related",
-          style: {
-            "border-width": 2.5,
-            "border-color": "#B5DEFF",
-            "z-index": 12,
-          },
-        },
-        {
-          selector: "edge.answer-related",
-          style: {
-            opacity: 1,
-            width: 2,
-            "line-color": "#8ACAFF",
-            "target-arrow-color": "#8ACAFF",
-          },
-        },
-        {
-          selector: "node.answer-muted",
-          style: {
-            "background-color": "#B7BABF",
-            "border-color": "#B7BABF",
-            opacity: 0.3,
-            "text-opacity": 0.25,
-          },
-        },
-        {
-          selector: "edge.answer-muted",
-          style: { opacity: 0.12, "text-opacity": 0.1 },
-        },
-        { selector: ".hidden", style: { display: "none" } },
-      ],
+      style: graphStyle,
       layout: { name: "preset" },
     });
     cyRef.current = cy;
+    cy.on("zoom", syncDisplay);
     cy.on("tap", "node", (e) => {
       const n = e.target as NodeSingular;
       if (n.data("kind") === "note") latest.current.onNote(n.data("noteId"));
@@ -304,20 +193,24 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
         if (edge) latest.current.onLink(edge);
       }
     });
-    cy.on("mouseover", 'node, edge[kind = "shared_entity"]', (e) => {
+    cy.on("mouseover", "node, edge", (e) => {
       const el = e.target;
+      el.addClass("hovered");
       const p = e.renderedPosition || el.renderedPosition();
       const label = el.isNode()
         ? el.data("label")
-        : "Ortak varlık: " +
-          (latest.current.map?.edges
-            .find((v) => v.id === el.id())
-            ?.entities.map((v) => v.name)
-            .join(", ") || "");
+        : el.data("kind") === "shared_entity"
+          ? "Ortak varlık: " +
+            (latest.current.map?.edges
+              .find((v) => v.id === el.id())
+              ?.entities.map((v) => v.name)
+              .join(", ") || "")
+          : String(el.data("label") || "Kaynak bağlantısı");
       setTooltip({ text: label, x: p.x, y: p.y });
       if (host.current) host.current.style.cursor = "pointer";
     });
-    cy.on("mouseout", "node, edge", () => {
+    cy.on("mouseout", "node, edge", (e) => {
+      e.target.removeClass("hovered");
       setTooltip(null);
       if (host.current) host.current.style.cursor = "grab";
     });
@@ -357,6 +250,8 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
     // The instance persists across panel changes, polling and list/graph switches.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(syncDisplay, [showLabels, showArrows]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -606,14 +501,13 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
     });
     elements.forEach((e) => {
       if (!e.data.source) {
-        e.data.size = nodeSize(
-          String(e.data.kind),
-          degrees.get(e.data.id!) || 0,
-        );
+        const degree = degrees.get(e.data.id!) || 0;
+        e.data.baseSize = nodeSize(String(e.data.kind), degree);
+        e.data.size = e.data.baseSize * nodeScale;
         e.data.caption = caption(String(e.data.label || ""));
-        e.data.color =
-          roleColors[e.data.kind as keyof typeof roleColors] ||
-          roleColors.entity;
+        e.data.color = pointColor(String(e.data.kind), degree, e.data.color);
+      } else {
+        e.data.alpha = lineOpacity;
       }
     });
     const count = elements.filter((e) => e.data.kind === "collection").length;
@@ -679,24 +573,26 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
         animate: false,
         fit: false,
         randomize: false,
-        nodeRepulsion: () => 9000,
-        idealEdgeLength: () => 130,
-        nodeOverlap: 20,
+        nodeRepulsion: () => 1600,
+        idealEdgeLength: () => 34,
+        nodeOverlap: 5,
         numIter: 450,
-        gravity: 0.12,
-        componentSpacing: 100,
+        gravity: 0.65,
+        componentSpacing: 36,
       }).run();
+      packComponents(cy);
       cy.nodes().forEach((n) => {
         positions.current.set(n.id(), { ...n.position() });
       });
     }
+    syncDisplay();
     if (cy.nodes().length && !firstFit.current && props.visible) {
       firstFit.current = true;
       const saved = cameras.current.get(layer.current);
       requestAnimationFrame(() => {
         cy.resize();
         if (saved) cy.viewport(saved);
-        else cy.fit(undefined, 85);
+        else fitOverview(cy);
       });
     }
   }, [
@@ -707,6 +603,8 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
     props.showTopics,
     props.showLinks,
     props.visible,
+    nodeScale,
+    lineOpacity,
   ]);
   useEffect(() => {
     if (props.visible) {
@@ -723,11 +621,77 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
       role="region"
       aria-label={props.claims ? "Kaynak ilişkileri grafı" : "Not haritası"}
       data-series-count={seriesCount}
+      data-appearance="constellation"
+      data-labels-enabled={showLabels}
       data-answer-focus={!!props.answerFocus}
       data-highlighted-nodes={props.answerFocus ? focusCounts.highlighted : 0}
       data-dimmed-nodes={props.answerFocus ? focusCounts.dimmed : 0}
     >
       <div ref={host} className="graph-canvas" aria-hidden="true" />
+      <div className="graph-settings" aria-label="Graf görünüm ayarları">
+        <details>
+          <summary>Filtreler</summary>
+          <label>
+            <input
+              type="checkbox"
+              checked={props.showTopics}
+              onChange={(e) => props.onShowTopics(e.target.checked)}
+            />
+            Konu merkezleri
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={props.showLinks}
+              onChange={(e) => props.onShowLinks(e.target.checked)}
+            />
+            Belge bağlantıları
+          </label>
+        </details>
+        <details>
+          <summary>Görünüm</summary>
+          <label>
+            <input
+              type="checkbox"
+              checked={showLabels}
+              onChange={(e) => setShowLabels(e.target.checked)}
+            />
+            Düğüm adları
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={showArrows}
+              onChange={(e) => setShowArrows(e.target.checked)}
+            />
+            İlişki yönleri
+          </label>
+          <label className="graph-range">
+            Düğüm boyutu
+            <input
+              aria-label="Düğüm boyutu"
+              type="range"
+              min="0.6"
+              max="2.4"
+              step="0.1"
+              value={nodeScale}
+              onChange={(e) => setNodeScale(Number(e.target.value))}
+            />
+          </label>
+          <label className="graph-range">
+            Bağlantı görünürlüğü
+            <input
+              aria-label="Bağlantı görünürlüğü"
+              type="range"
+              min="0.06"
+              max="0.65"
+              step="0.01"
+              value={lineOpacity}
+              onChange={(e) => setLineOpacity(Number(e.target.value))}
+            />
+          </label>
+        </details>
+      </div>
       <div className="graph-types" aria-label="Düğüm türleri">
         <span className="sr-only" aria-label="Graf özeti">
           {seriesCount} belge serisi

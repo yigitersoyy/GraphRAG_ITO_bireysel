@@ -6,6 +6,42 @@ const created: string[] = [],
   topics: { topic_id: string; version: number }[] = [];
 const screenshotDir = "../reports/frontend-e2e";
 
+test("constellation display controls preserve the graph while changing labels and scale", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const graph = page.getByRole("region", { name: "Not haritası", exact: true });
+  await expect(graph).toHaveAttribute("data-appearance", "constellation");
+  await expect(graph).toHaveAttribute("data-labels-enabled", "false");
+  await expect(graph).toHaveCSS("background-color", "rgb(30, 33, 38)");
+  await graph.locator("summary").filter({ hasText: "Görünüm" }).click();
+  await graph
+    .getByRole("checkbox", { name: "Düğüm adları", exact: true })
+    .check();
+  await expect(graph).toHaveAttribute("data-labels-enabled", "true");
+  await graph
+    .getByRole("checkbox", { name: "İlişki yönleri", exact: true })
+    .check();
+  await graph.getByLabel("Düğüm boyutu", { exact: true }).fill("1.8");
+  await graph.getByLabel("Bağlantı görünürlüğü", { exact: true }).fill("0.4");
+  await expect(graph.getByLabel("Düğüm boyutu", { exact: true })).toHaveValue(
+    "1.8",
+  );
+  await graph
+    .getByRole("checkbox", { name: "Düğüm adları", exact: true })
+    .uncheck();
+  await graph.locator("summary").filter({ hasText: "Filtreler" }).click();
+  await graph
+    .getByRole("checkbox", { name: "Konu merkezleri", exact: true })
+    .uncheck();
+  await expect(
+    page.locator(".layer-controls").getByLabel("Konular", { exact: true }),
+  ).not.toBeChecked();
+  await graph
+    .getByRole("checkbox", { name: "Konu merkezleri", exact: true })
+    .check();
+});
+
 test("deleted documents appear only in Deleted, with mobile list access", async ({
   page,
   request,
@@ -41,7 +77,9 @@ test("deleted documents appear only in Deleted, with mobile list access", async 
   await expect(
     page.getByText("Sonuç bulunamadı.", { exact: false }),
   ).toBeVisible();
-  await expect(page.locator("#search-results").getByRole("option")).toHaveCount(0);
+  await expect(page.locator("#search-results").getByRole("option")).toHaveCount(
+    0,
+  );
   await page
     .getByRole("button", { name: "Aramayı kapat", exact: true })
     .click();
@@ -579,7 +617,7 @@ test("graph, pagination, keyboard search, source and camera", async ({
   ).toBeVisible();
   await expect(page.locator(".source-button")).not.toHaveCount(0);
   const graph = page.getByRole("region", { name: "Not haritası", exact: true });
-  await expect(graph).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  await expect(graph).toHaveCSS("background-color", "rgb(30, 33, 38)");
   await expect(graph).toHaveAttribute("data-answer-focus", "true");
   await expect
     .poll(async () =>
