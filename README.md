@@ -14,6 +14,28 @@ stops this project's services while preserving notes. See [one-click usage](docs
 - [Evaluation procedure and limitations](evaluation/README.md)
 - [Full-text analyzer decision](docs/decisions/0001-fulltext-analyzer.md)
 
+## Quick start with Docker Hub
+
+Docker is the only prerequisite; nothing is built locally. Demo providers are the default,
+so LM Studio and model downloads are not required.
+
+```bash
+curl -O https://raw.githubusercontent.com/yigitersoyy/GraphRAG_ITO_bireysel/main/compose.hub.yaml
+echo "NEO4J_PASSWORD=$(openssl rand -hex 16)" > .env
+docker compose -f compose.hub.yaml up -d
+```
+
+Open `http://localhost:8501`.
+
+Demo mode uses deterministic fake providers. Its answers show that the pipeline works, not
+that the model answers well. Real answers need LM Studio with models. Notes are stored in the
+`neo4j_data` volume. The API has no authentication, so keep the ports bound to `127.0.0.1`.
+
+On Windows without `openssl`, use Git Bash or set `NEO4J_PASSWORD` to a value you choose.
+The images are `linux/amd64`. To update, run `docker compose -f compose.hub.yaml pull` and
+then `docker compose -f compose.hub.yaml up -d`. Stop with
+`docker compose -f compose.hub.yaml down`.
+
 ## Workspace
 
 The React workspace provides a graph, note inspector/editor, paginated lists, topic management,

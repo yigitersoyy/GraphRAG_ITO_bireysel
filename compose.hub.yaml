@@ -1,0 +1,128 @@
+# Runs the app from prebuilt Docker Hub images; nothing is built locally.
+# Demo providers are the default, so no LM Studio is required. NEO4J_PASSWORD must come from .env.
+# Images: yigitersoy1/notes-graphrag and yigitersoy1/notes-graphrag-ui (linux/amd64).
+x-app-env: &app-env
+  NEO4J_URI: bolt://neo4j:7687
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+  NEO4J_USERNAME: neo4j
+  NEO4J_DATABASE: neo4j
+  STORE_BACKEND: neo4j
+  WORKSPACE_ID: ${WORKSPACE_ID:-default}
+  GRAPHRAG_DEMO: ${GRAPHRAG_DEMO:-1}
+  LM_STUDIO_INSTANCE_ID: ${LM_STUDIO_INSTANCE_ID:-local-lmstudio}
+  LLM_BASE_URL: ${COMPOSE_LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+  EMBEDDING_BASE_URL: ${COMPOSE_EMBEDDING_BASE_URL:-http://host.docker.internal:1234/v1}
+  LM_STUDIO_API_KEY: ${LM_STUDIO_API_KEY:-}
+  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+  EXTRACTION_MODEL: ${EXTRACTION_MODEL:-}
+  ANSWER_MODEL: ${ANSWER_MODEL:-}
+  CHAT_TEMPERATURE: ${CHAT_TEMPERATURE:-0}
+  LLM_INSTRUCTION_SUFFIX: ${LLM_INSTRUCTION_SUFFIX:-}
+  CHAT_TEMPLATE_ENABLE_THINKING: ${CHAT_TEMPLATE_ENABLE_THINKING:-false}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+  EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
+  EMBEDDING_PROFILE: ${EMBEDDING_PROFILE:-qwen3-embedding-0.6b-local-v1}
+  EMBEDDING_QUERY_TEMPLATE: "${EMBEDDING_QUERY_TEMPLATE:-Instruct: Given a question about personal notes, retrieve passages that answer the question. Query:{question}}"
+  EMBEDDING_DOCUMENT_PREFIX: ${EMBEDDING_DOCUMENT_PREFIX:-}
+  LM_STUDIO_CONTEXT_TOKENS: ${LM_STUDIO_CONTEXT_TOKENS:-8192}
+  MAX_CONTEXT_TOKENS: ${MAX_CONTEXT_TOKENS:-4096}
+  EXTRACTION_MAX_OUTPUT_TOKENS: ${EXTRACTION_MAX_OUTPUT_TOKENS:-2048}
+  ANSWER_MAX_OUTPUT_TOKENS: ${ANSWER_MAX_OUTPUT_TOKENS:-1024}
+  PROVIDER_TIMEOUT_SECONDS: ${PROVIDER_TIMEOUT_SECONDS:-120}
+  QUESTION_TIMEOUT_SECONDS: ${QUESTION_TIMEOUT_SECONDS:-180}
+  JOB_LEASE_SECONDS: ${JOB_LEASE_SECONDS:-180}
+  INFERENCE_SLOT_WAIT_SECONDS: ${INFERENCE_SLOT_WAIT_SECONDS:-30}
+  CAPABILITY_PROBE_MAX_AGE_HOURS: ${CAPABILITY_PROBE_MAX_AGE_HOURS:-24}
+  MAX_NOTE_BYTES: ${MAX_NOTE_BYTES:-1048576}
+  MAX_NOTE_CHARS: ${MAX_NOTE_CHARS:-100000}
+  MAX_REQUEST_BYTES: ${MAX_REQUEST_BYTES:-2097152}
+  MAX_TITLE_CHARS: ${MAX_TITLE_CHARS:-200}
+  MAX_CHUNKS_PER_NOTE: ${MAX_CHUNKS_PER_NOTE:-128}
+  CHUNK_TARGET_TOKENS: ${CHUNK_TARGET_TOKENS:-500}
+  CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-60}
+  MAX_PROVIDER_CALLS_PER_JOB: ${MAX_PROVIDER_CALLS_PER_JOB:-64}
+  JOB_MAX_ATTEMPTS: ${JOB_MAX_ATTEMPTS:-3}
+  IDEMPOTENCY_RETENTION_DAYS: ${IDEMPOTENCY_RETENTION_DAYS:-30}
+  DELETED_CONTENT_RETENTION_DAYS: ${DELETED_CONTENT_RETENTION_DAYS:-1}
+  MAINTENANCE_INTERVAL_SECONDS: ${MAINTENANCE_INTERVAL_SECONDS:-3600}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  neo4j:
+    image: neo4j:5.26-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+      HEALTHCHECK_PASSWORD: ${NEO4J_PASSWORD}
+    ports:
+      - "127.0.0.1:${NEO4J_HTTP_PORT:-7474}:7474"
+      - "127.0.0.1:${NEO4J_BOLT_PORT:-7687}:7687"
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$HEALTHCHECK_PASSWORD\" 'RETURN 1' >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 36
+      start_period: 20s
+
+  migrate:
+    image: yigitersoy1/notes-graphrag:latest
+    command: ["migrate"]
+    environment: *app-env
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: yigitersoy1/notes-graphrag:latest
+    init: true
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *app-env
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  worker:
+    image: yigitersoy1/notes-graphrag:latest
+    init: true
+    command: ["worker"]
+    environment:
+      <<: *app-env
+      WORKER_POLL_SECONDS: "0.5"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: on-failure
+
+  ui:
+    image: yigitersoy1/notes-graphrag-ui:latest
+    init: true
+    environment:
+      API_BASE_URL: http://api:8000
+    ports:
+      - "127.0.0.1:${UI_PORT:-8501}:8501"
+    depends_on:
+      api:
+        condition: service_started
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8501/health/ui"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  neo4j_data:
