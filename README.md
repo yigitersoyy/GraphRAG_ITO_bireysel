@@ -36,6 +36,29 @@ PowerShell 5.1 use `Set-Content .env "NEO4J_PASSWORD=your-value" -Encoding ascii
 redirect writes UTF-16 and Compose rejects that file. The images are `linux/amd64`. To update,
 run `docker compose -f compose.hub.yaml pull` and then `docker compose -f compose.hub.yaml up -d`.
 Stop with `docker compose -f compose.hub.yaml down`; notes stay in the volume unless you add `-v`.
+If the default ports are taken, set `API_PORT`, `UI_PORT`, `NEO4J_HTTP_PORT` or `NEO4J_BOLT_PORT`
+in `.env` and run the same commands again.
+
+To answer from your own notes instead of the demo providers, start LM Studio on the host with the
+chat and embedding models loaded and add the model settings to `.env`: `GRAPHRAG_DEMO=0`,
+`EXTRACTION_MODEL`, `ANSWER_MODEL`, `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, `EMBEDDING_PROFILE`
+and `EMBEDDING_QUERY_TEMPLATE`. `COMPOSE_LLM_BASE_URL`/`COMPOSE_EMBEDDING_BASE_URL` already default
+to `http://host.docker.internal:1234/v1`, so the containers call LM Studio on the host; no model
+lives in the images. Live mode additionally requires a recorded capability probe, and it cannot
+reuse a volume that already holds demo notes: demo embeddings are 64-dimensional (`fake-v1`) and
+`migrate` refuses the change with `existing chunk_embedding_v1 has 64 dimensions but settings
+require 768`, so clear it with `docker compose -f compose.hub.yaml down -v` first.
+
+```bash
+docker compose -f compose.hub.yaml up -d neo4j
+docker compose -f compose.hub.yaml run --rm migrate
+docker compose -f compose.hub.yaml run --rm api probe --record   # needs LM Studio reachable
+docker compose -f compose.hub.yaml up -d
+```
+
+Readiness stays `not ready` with `no capability probe recorded` until that probe passes, and a
+probe older than 24 hours has to be repeated. See [With LM Studio](#with-lm-studio) for model and
+preprocessing details.
 
 ## Workspace
 
