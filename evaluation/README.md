@@ -1,6 +1,6 @@
 # Evaluation
 
-The datasets are small, agent-authored engineering checks, not independent human assessments.
+The datasets provide small-scale engineering checks and have not undergone independent review.
 The baseline is for development. Validation and holdout failures have already been inspected;
 all existing splits should be treated as regression data for future changes.
 
