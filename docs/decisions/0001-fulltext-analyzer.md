@@ -4,8 +4,8 @@ Status: accepted for the MVP. Measured on Neo4j 5.26.32 Community, 2026-11-05.
 
 ## Context
 
-Architecture section 5.5 requires choosing and testing a full-text analyzer for Turkish and English,
-then recording it in the migration. Changing an analyzer requires an index rebuild.
+Mixed Turkish and English notes need a full-text analyzer recorded in the migration.
+Changing an analyzer requires an index rebuild.
 
 ## What was measured
 
@@ -37,6 +37,7 @@ keeps mixed Turkish and English notes in one index without a language-specific s
   evaluation set shows this on question q07. Query-side and index-side stemming are later changes
   that require a rebuild.
 - Query terms are folded in application code (`retrieval/lexical.py: fold_for_search`) so that
-  `İSTANBUL` finds `İstanbul`. Entity identity deliberately does not use that folding (architecture 6.4).
+  `İSTANBUL` finds `İstanbul`. Entity identity deliberately does not use that folding.
 - Vector retrieval partly compensates for the missing stemming, but it is only as good as the
-  embedding model, which has not been measured here.
+  embedding model, whose quality was not measured in this analyzer probe. See the
+  [evaluation guide](../../evaluation/README.md) for model-specific assessment.

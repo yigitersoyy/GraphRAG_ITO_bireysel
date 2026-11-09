@@ -6,9 +6,10 @@ Başarısız dosya diğerlerini durdurmaz; tekrar deneme başarılı dosyaları 
 Toplu seçimde dosya adına tıklayarak salt okunur önizleme açılır, ardından
 **Dosyaları yükle** ile başlanır. Tek dosyada aşağıdaki düzenlenebilir önizleme
 devam eder. “İşleme alındı” model işleminin bittiği anlamına gelmez; son durumu
-listeden izleyin. [Toplu kullanım ve yeni graf](QWEN35_TOPLU_YUKLEME_VE_GRAF.md).
+listeden izleyin. Durdurma o anki dosyadan sonra işler. Ortak konu seçebilir veya
+[başlığa göre otomatik gruplamayı](KONU_GRUPLAMA_VE_TASIMA.md) kullanabilirsiniz.
 
-8 Kasım 2026 ek kapsamı. **Yeni not → PDF, Word, Excel veya metin dosyası yükle** ile dosya seçin.
+**Yeni not → PDF, Word, Excel veya metin dosyası yükle** ile dosya seçin.
 Metin kaydetmeden önce editörde görünür. Metni kontrol edin, isterseniz düzenleyin ve
 **Kaydet** düğmesine basın. Önizleme not veya model işi oluşturmaz. Kaydettikten sonra
 mevcut işleme durumu, arama, graf ve kaynaklı soru-cevap akışı kullanılır.
@@ -80,52 +81,3 @@ yükleme uçlarında dosya ve multipart payı için 12 MiB istek sınırı vard�
 
 Metin çıkarma sınırlamaları: [pypdf belgeleri](https://pypdf.readthedocs.io/en/latest/user/extract-text.html).
 Word ana gövde yapısı: [Microsoft WordprocessingML](https://learn.microsoft.com/en-us/office/open-xml/word/how-to-open-and-add-text-to-a-word-processing-document).
-
-Yeni testler önizlemenin salt okunurluğunu, iki dosya türünün kaynaklı cevap akışını,
-tam alıntı aralıklarını, Türkçe metni, tablo/bağlantı sırasını ve bozuk/şifreli/taranmış/
-aşırı büyük dosyaları kapsar. Tarayıcı testinde her iki biçim, önizleme düzenleme ve
-bozuk PDF hata mesajı gerçek API üzerinden doğrulanır. Kanıtlar:
-`reports/tests-pdf-word-final.xml`, `reports/frontend-e2e/results.json`,
-`reports/pdf-word-live.json` ve `reports/frontend-e2e/document-pdf.png` / `document-docx.png`.
-
-Son sonuç: **342 test geçti**, eşzamanlı gönderim testi bu koşudan ayrılıp ayrıca
-çalıştırıldı ve **1/1 geçti** (toplam 343 test). İlk tam tekrarda, önceki teslimde de
-gözlenen Windows/Neo4j havuz kontrolü takılması yeniden oluştu; yığın kaydı
-`reports/pdf-word-test-hang-stack.txt`. Bu kök neden çözülmüş sayılmaz. Başlangıçta
-Neo4j hazır olmadan başlayan ve eski biçim/sınır beklentilerini içeren başarısız koşu
-`reports/tests-pdf-word-full.xml` olarak korundu; son sonuç onun yerine başarılı sayılmaz.
-Son iki koşu `reports/tests-pdf-word-final.xml` ve `reports/tests-pdf-word-concurrency.xml`.
-
-**6 gerçek API tarayıcı testi** 26,5 saniyede geçti; **2 arayüz birim testi**, üretim
-derlemesi, Ruff ve mypy (62 kaynak) başarılı. Son Docker API üzerinde her iki dosya
-türü işlendi ve tam kaynak aralıklarıyla cevaplandı. 2 MiB üzerindeki Word dosyası
-ve Türkçe metni geçti; normal JSON isteği sınırı ayrıca 413 ile doğrulandı.
-Son canlı önizleme masaüstü ve 360 px mobilde incelendi: taşma/tarayıcı hatası yok,
-bu önizleme not oluşturmadı. Yeni çalışma alanı testlerden sonra boş; eski demo
-servisindeki altı not korundu. Kanıtlar: `reports/pdf-word-ui.json`,
-`reports/pdf-word-final-state.json` ve `reports/pdf-word-live.json`.
-
-### Excel ek kapsamının son doğrulaması
-
-Excel ve ortak belge dönüştürme testleri **33/33** geçti. Türkçe, çok sayfa, hücre
-adresleri, gizli veriler, boole, tarihler, yüzdeler, para biçimi, formülün kayıtlı/
-eksik sonucu, yanlış bildirilen sayfa boyutları ve sınır aşımları kapsandı. XLS'teki
-yalnızca saat değerinin yanlış bir 1899 tarihi üretmemesi ayrıca doğrulandı.
-**6 gerçek API tarayıcı testi** 42,2 saniyede geçti; yükleme testi artık PDF, Word,
-XLSX ve XLS biçimlerinin dördünü de kapsar. Üretim derlemesi ve 2 arayüz birim testi,
-Ruff ve mypy (63 kaynak) başarılı.
-
-Son yerel Docker sürümünde XLSX ve XLS ayrı ayrı işlendi ve gerçek modelle doğru
-kaynak aralıklarıyla cevaplandı. Canlı Excel önizlemesi masaüstü ve 360 px mobilde
-incelendi; taşma/tarayıcı hatası yok. Kontrol notları silindi; eski altı demo notu
-korundu. Kanıtlar: `reports/excel-live.json`, `reports/excel-ui.json`,
-`reports/tests-excel-import.xml`, `reports/frontend-e2e/results.json`.
-
-Genel test koşusunda **359 test geçti**, başarısız/atlanan yok (270,85 saniye).
-Önceden bilinen Windows/Neo4j eşzamanlılık testi ayrı çalıştırılır; bu koşudan
-1 test ayrıldı. Ana kanıt: `reports/tests-excel-full.xml`. Ayrı eşzamanlılık testi
-aynı Windows Neo4j sürücüsü havuz kontrolünde takıldı; yığın alındı ve yalnızca
-bu teste ait süreçler durduruldu. Bu test başarılı sayılmaz; son sürüm için 360/360
-iddiasında bulunulmaz. Kanıt: `reports/excel-concurrency-hang-stack.txt`.
-Önceki Windows takılması giderilmiş sayılmaz. Canlı Linux Docker yükleme/cevap
-akışlarında bu sorun gözlenmedi.

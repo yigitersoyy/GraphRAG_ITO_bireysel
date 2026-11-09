@@ -1,11 +1,13 @@
 # Windows kurulumu ve çalışma modları
 
-Ana arayüz, onaylanan koyu graf tasarımını kullanan React çalışma alanıdır. Graf, sağ not paneli, liste/konular, Ctrl+K araması ve kaynaklı cevaplar aynı ekranda bulunur. Eski Streamlit kaldırıldı; React tek desteklenen arayüzdür. [Temizlik ve NiceGUI kararı](TEMIZLIK_VE_PYTHON_GECISI.md).
+Ana arayüz React çalışma alanıdır. Graf, sağ not paneli, liste/konular, Ctrl+K araması
+ve kaynaklı cevaplar aynı ekranda bulunur. React tek desteklenen arayüzdür;
+[mimari ve arayüz kararı](../README.md#architecture) README'dedir.
 
 ## Günlük kullanım — tek tık
 
-Bu makinede kurulum tamamlandı. Proje klasöründeki **`BASLAT.cmd`** dosyasına çift
-tıklayın. Docker Linux motoru gerekirse açılır ve hazır olması beklenir. LM Studio
+İlk kurulum ve model yapılandırmasından sonra proje klasöründeki **`BASLAT.cmd`**
+dosyasına çift tıklayın. Docker Linux motoru gerekirse açılır ve hazır olması beklenir. LM Studio
 arka uç servisi, projeye ait sohbet/embedding modelleri ve 1234 yerel sunucusu
 hazırlanır. Neo4j, migration, gerektiğinde model bağlantı kontrolü, API, worker ve
 arayüz hazır olduktan sonra **http://127.0.0.1:28501** tarayıcıda açılır.
@@ -90,7 +92,10 @@ Compose projesi `notes-graphrag-persistent-demo`, veri volume'u bu proje adına 
 
 ## Gerçek LM Studio kullanımı
 
-Kullanıcının isteğiyle çıkarım ve cevap modeli Qwen3.5 9B'ye geçirildi. Önceki Qwen3 8B yüklemesi kapatıldı; uygulamada eski modele geri dönüş yok. Yerel sunucu ve modeller için:
+Başlatıcının Qwen3.5 9B sohbet ve Nomic embedding profiline uygun örnek kurulum
+aşağıdadır. Uygulama model kimliklerini `.env` dosyasından alır; `.env.example` sohbet
+kimliklerini boş bırakır ve farklı bir embedding profili içerir. Aşağıdaki örneği kullanırken
+kimlik, boyut ve ön işleme alanlarının tamamını birlikte ayarlayın. Yerel sunucu ve modeller için:
 
 ```powershell
 lms load qwen/qwen3.5-9b --identifier qwen/qwen3.5-9b --context-length 8192 --gpu 0.8 --parallel 1 -y
@@ -130,6 +135,11 @@ Başlatma sırası: Neo4j → migration → container içinden kaydedilmiş mode
 
 Arayüz gerekmiyorsa `-NoUi` ekleyin. Özel port kullanıyorsanız teşhiste `--api-base` ve `--neo4j-uri` verin. Doğrudan Compose çağrılarında aynı port değişkenlerini de koruyun.
 
+Yeni model/profil ayarları mevcut yayımlanmış belgeleri topluca yeniden işlemez.
+Eski pipeline ile oluşturulmuş bekleyen işler sessizce devam etmez; `PIPELINE_CHANGED`
+hatasından sonra yeniden deneme yeni bir revizyon/iş oluşturur. Embedding modeli/profili
+değiştiğinde indeks uyumluluğunu ayrıca sağlayın. [İşletim ve kurtarma](operations.md#extraction-pipeline-upgrades).
+
 ## Kontroller
 
 Frontend geliştirme ve test:
@@ -140,6 +150,12 @@ npm.cmd ci
 npm.cmd run build
 npm.cmd test
 ```
+
+`npm.cmd run benchmark`, boş bellek demosunda üç koşulu graf başlangıç/pan ölçümü
+yapar. API adresi varsayılan `http://127.0.0.1:18501`; yukarıdaki 18001 portlu deneme için
+`$env:BENCHMARK_API_URL='http://127.0.0.1:18001'` ayarlayın. Araç canlı/Neo4j veya dolu demo hedefini reddeder ve
+yalnızca kendi sentetik notlarını oluşturup siler. Sonuçlar `reports/ui-benchmark/`
+altına yazılır; farklı cihazlar için genel performans garantisi değildir.
 
 `npm.cmd run dev` API için varsayılan `http://127.0.0.1:8000` adresine proxy yapar; başka hedef için aynı terminalde `WORKSPACE_API_URL` ayarlayın. Kalıcı tarayıcı testleri yalnızca boş `memory-demo` üzerinde çalışır. `start.ps1 -Mode demo -ApiPort 18001 -UiPort 18502` sonrasında `frontend/` içinde `npm.cmd run test:e2e` kullanılır. Testler gerçek model/kişisel veri hedefini reddeder; sentetik notları temizler.
 

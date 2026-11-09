@@ -1,34 +1,11 @@
 # Operations
 
-## Windows and 7 November 2026 update
-
-Use [windows.md](windows.md) for PowerShell setup, mode-specific start/stop, diagnostics,
-separate local/container addresses and offline Python backend builds. The current architecture/backlog
-is [MIMARI_VE_YAPILACAKLAR.md](MIMARI_VE_YAPILACAKLAR.md); the earlier section-numbered design
-document referenced in older code is not included in this checkout.
-
-Compose now includes a separate `ui` build target/service: the approved React workspace is
-built with Node and served by Nginx, with same-origin API proxying. Native demos use the
-Python static/proxy entry point. The lifecycle tool uses distinct
-`notes-graphrag-persistent-demo` and `notes-graphrag-live` projects/volumes.
-See [UI implementation](ARAYUZ_UYGULAMA_RAPORU.md). The Streamlit target has been removed. React is the sole supported UI; see [the measured NiceGUI decision](TEMIZLIK_VE_PYTHON_GECISI.md).
-
-Real Qwen 2.5 7B / Nomic 768-dimensional probes have been exercised from the application
-container; the later selected local chat profile is Qwen3 8B with an explicit `/no_think`
-suffix and temperature 0.2. Live evaluation is implemented; see [evaluation instructions](../evaluation/README.md).
-Historical statements below about unavailable LM Studio describe the 6 November environment,
-not the current machine. Consult [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) for current results.
-
-Source offsets for a unique, exact model-supplied quote can now be derived from the note before
-strict extraction validation. Ambiguous/missing quotes are not guessed. The answer wire schema
-requires sentence and citation fields even when the Python parser supplies defaults.
-The extraction wire schema omits numeric positions and schema version: those belong to the
-server. Legacy outputs with numeric positions still undergo the same strict validation.
-
-The new `scripts/neo4j_archive.py` provides cross-platform backup/restore. Backup restores the
-source's prior running state; restore requires a stopped, empty target and leaves it stopped.
-See the Windows guide for commands. Restart persistence and a restore into an empty volume
-were verified on 7 November; the full evidence is kept in `reports/persistence-verification.json`.
+Use the [Windows guide](windows.md) for setup, mode-specific start/stop, diagnostics and model
+configuration; the [README](../README.md#architecture) describes the architecture and UI decision.
+React is the supported UI, served through Nginx or the native Python static/proxy server.
+The lifecycle manager separates the `notes-graphrag-persistent-demo` and `notes-graphrag-live`
+Compose projects and volumes. Memory demos lose data on exit. See the
+[evaluation guide](../evaluation/README.md) for isolated model-quality measurements.
 
 ## Services
 
@@ -47,35 +24,40 @@ for throughput.
 ## First start
 
 ```bash
-cp .env.example .env            # set NEO4J_PASSWORD; keep .env out of git
+if [ ! -f .env ]; then cp .env.example .env; fi
+# Set NEO4J_PASSWORD and actual model/profile settings; keep .env out of git.
 scripts/build_wheelhouse.sh     # builds deps and the app wheel on the host (see below)
+docker compose build migrate api worker ui
 docker compose up -d --wait neo4j
-docker compose up -d migrate     # exits 0 when migrations are applied
-docker compose up -d api worker
+docker compose run --rm migrate
+docker compose run --rm api probe --record   # live mode only
+docker compose up -d api worker ui
 curl --fail http://127.0.0.1:8000/health/ready
 ```
 
 The Python app stage is installed offline from locked wheels; the frontend build stage uses
 `npm ci` and `frontend/package-lock.json` and needs package registry access on its first build.
-All runtime browser assets are served locally. `scripts/build_wheelhouse.sh` exists because the Python image is built offline from the locked
-backend-only dependencies in `wheelhouse/backend/`. The build container does not trust the sandbox TLS interception CA, so fetching
-packages inside the image failed. Building the wheelhouse on the host avoids that and makes the image
-build reproducible. Run the script again after any dependency or source change.
+All runtime browser assets are served locally. The wheelhouse script prepares locked backend-only
+dependencies and the application wheel in `wheelhouse/backend/` for offline image installation.
+Run it again after any dependency or source change.
 
 Set `GRAPHRAG_DEMO=1` to run every service with the deterministic demo providers, for example to
 test the stack without LM Studio. Demo mode uses 64-dimensional embeddings, so run it against a
 database that was migrated in demo mode. The migration guard refuses a mismatch.
+Set this variable for every Compose call in that sequence and skip the live-only probe.
+For daily use, prefer the lifecycle commands in the Windows guide to keep project names,
+volumes and recorded ports consistent.
 
 ## Schema and the vector dimension guard
 
 - `notes-graphrag migrate` applies versioned migrations once and records a checksum for each.
 - An applied migration that has been edited is refused.
 - An existing `chunk_embedding_v1` index whose dimension differs from `EMBEDDING_DIMENSIONS` is
-  refused. This was checked live: a demo database (64) against the production setting (1024).
+  refused. Demo embeddings have 64 dimensions; live dimensions must match the configured model.
   Changing the embedding model or profile requires a full reindex, not an index reuse.
 - `api` refuses to start on a schema version that does not match the code.
 
-## Backup and restore (tested)
+## Backup and restore
 
 Neo4j Community has no online dump, so backup stops the database container briefly.
 
@@ -89,25 +71,15 @@ stopped target and never overwrites an existing database. Backup checks director
 before stopping the source; a failed dump restarts a previously running source.
 Use a new output directory for each backup.
 
-Cleanup verification (2026-11-08): a full dump restored into a separate empty volume
-matched all properties of 1,367 nodes and 1,630 relationships.
-
-Historical result: tested on 2026-11-06 against the final schema (migrations 1 to 4), with disposable data:
-
-- A marker node was written, then the database dumped to a 1.6 MB `neo4j.dump` in about 21 s,
-  including the container restart.
-- A fresh, empty `neo4j:5.26-community` container was restored from that dump in about 15 s.
-- After restore: the marker node was present, schema versions were `[1, 2, 3, 4]`, and all 21
-  indexes were `ONLINE`.
-
 Capability probe records are part of the database too. The test suite clears the database it runs
 against, so a stack that was tested must be probed again (`notes-graphrag probe --record`) before
 readiness returns to 200.
 
 Backups contain note text and embeddings. Store them with the same care as the database.
 
-Recovery time objective is not defined; the measured restore takes under a minute for this data
-size. Backup age is not monitored.
+Recovery time objective is not defined and backup age is not monitored. Verify restores on a
+separate empty target, including note/revision properties and online indexes. Readable exports
+from `scripts/export_notes.py` preserve active/pending note revisions, not the full database history.
 
 ## Inference slot and recovery
 
@@ -125,7 +97,7 @@ per endpoint (`InferenceGate`):
 Check the slot with `GET /api/v1/system/status` (`inference_slot.state`).
 
 Limit: the probe is a timed heuristic. It proves the endpoint answers, not that the previous GPU job
-has actually stopped. Only the live LM Studio test can show that, and it was not run here.
+has actually stopped. Validate timeout/recovery behaviour against the actual model server.
 
 ## Failure behaviour (verified in tests)
 
@@ -149,8 +121,11 @@ has actually stopped. Only the live LM Studio test can show that, and it was not
 ## Test database safety
 
 Destructive Neo4j tests clear the database they point at, so they require
-`NEO4J_TEST_WIPE=1`. They also refuse to run while a worker heartbeat is fresh (under 120 seconds).
-Stop the running services first. CI uses its own throwaway service container.
+`NEO4J_TEST_WIPE=1`. They reject live database addresses found in `.env` and
+`reports/runtime/live.json`, including loopback aliases, even if the live worker is stopped.
+They also refuse a fresh worker heartbeat (under 120 seconds). Use an explicitly separate,
+disposable target; stopping a live service does not make its data disposable. CI uses its own
+throwaway service container.
 
 ## Readiness is backed by evidence
 
@@ -170,11 +145,41 @@ Demo mode cannot be probed and is reported as exempt. Readiness in demo mode say
 
 - Deleted notes keep a tombstone. Their revisions, chunks, claims and jobs are removed after
   `DELETED_CONTENT_RETENTION_DAYS` (default 1). Entities left without claims are removed too.
+  The document title and deletion timestamp remain after content purge. Old records whose titles
+  were already cleared display a fallback title; the original name is not reconstructed.
 - Idempotency records are kept for `IDEMPOTENCY_RETENTION_DAYS` (default 30). Within that period a
   replayed request for a deleted note still answers `409 NOTE_DELETED` and never creates a new
   note. After it, the same key is a new operation.
 - The worker runs this maintenance about every `MAINTENANCE_INTERVAL_SECONDS` (default 3600). It is
   idempotent. Counts are logged when anything was removed.
+
+`GET /api/v1/workspace/deleted-notes?limit=50&cursor=...` returns tombstone metadata only:
+`note_id`, `title`, `deleted_at`, `content_purged`, total and next cursor. Results are ordered
+newest deletion first with an ID tie-breaker. The UI's **Liste → Silinenler** view is separate
+from unassigned active notes (**Düzenlenmemiş**). Deleted content is excluded from the normal
+catalog, search, graph and answer sources before and after purge. The UI has no restore or
+permanent-delete action.
+
+## Workspace metadata and sources
+
+`/api/v1/workspace/notes` paginates the catalog; cursors are bound to search/topic filters.
+`/api/v1/workspace/map` exposes bounded notes, topics, shared-entity links and source-backed
+relations with explicit limit flags. Topic/filename-series links are organizational metadata,
+not model-extracted claims. Calculated semantic similarity is unavailable.
+
+Topic edits and `PATCH /api/v1/notes/{id}/metadata` require the expected metadata version;
+conflicts do not overwrite another edit. Topic assignment does not change source revisions or
+enqueue extraction. Clients refresh on both graph and metadata versions. Search cancels stale
+requests and refreshes with workspace versions, so deleted notes and their entities disappear
+from open search results. See [topic management](KONU_GRUPLAMA_VE_TASIMA.md).
+
+Extraction uses relationship-first wire output (`relations`) converted to the internal
+entities/claims representation before validation. A model-supplied quote must match a unique,
+exact substring of the note; the server computes its offsets and schema version. Missing or
+ambiguous quotes, invalid relation types and inconsistent entity references are rejected rather
+than silently dropped. Legacy numeric offsets are still strictly checked. Answer wire schemas
+require sentence and citation fields. Citations and answer-graph edges refer to immutable
+revisions, with ranges measured in Unicode code points rather than UTF-16 units.
 
 ## Request limits
 
@@ -206,10 +211,6 @@ restarts it, the lease expires and the job is reclaimed), database restarted dur
 restarted, a 60-request burst, an oversized body, and a check that note and question text never
 reach the logs.
 
-Results of the last full run (28 of 28 checks passed, 88 s): every scenario above passed, including
-the worker crash (lease expiry, reclaim with attempt 2, slot back to IDLE) and the database restart
-with new ingestion afterwards.
-
 Two details that matter when reproducing this:
 
 - `docker kill` counts as a manual stop, and restart policies do not recover manual stops. A crash
@@ -220,9 +221,9 @@ Two details that matter when reproducing this:
 
 ## Known limits (be explicit with users)
 
-- **Live validation is model-specific.** On 7 November the selected Qwen3 8B Q4_K_M and Nomic
-  v1.5 Q4_K_M (768 dimensions) models were connected and measured. Earlier simulator results do not certify real model
-  quality; current limits and actual outcomes are recorded in `DEVELOPMENT_PLAN.md`.
+- **Live validation is model-specific.** The Windows launcher profile uses Qwen3.5-9B and
+  Nomic v1.5 (768 dimensions). Earlier Qwen3 8B measurements do not certify the newer model;
+  see [evaluation provenance and limitations](../evaluation/README.md).
 - **Model quality is a separate acceptance criterion.** Live evaluation records failed
   extraction, missing evidence, structural citation checks and pending semantic review. A
   successful health probe or demo run must not be presented as real-model quality approval.
@@ -235,10 +236,16 @@ Two details that matter when reproducing this:
 - One worker is the tested configuration. Several workers are safe by design (leases and fencing),
   but throughput with more than one was not measured.
 - Tests clear the Neo4j database they run against. Run them on a disposable instance only.
+- Intermittent Windows hangs were observed in the Neo4j driver's concurrent identical-submission
+  test at `BoltSocketBase.at_eof`. A later passing run does not establish that the issue is fixed.
+  Keep timed-out/failed runs visible and investigate the driver/pool separately if it recurs.
 
-## Long-running job ownership (2026-11-07)
+## Long-running job ownership
 
-Workers renew the job lease and workspace heartbeat while inference is running. Renewal is token-fenced and rejects expired, reassigned or cancelled jobs. Recovery probes use 64 tokens; batch probe startup may wait for an old slot lease to expire, while interactive admission keeps its short wait budget. See [current verification](ARAYUZ_ONCESI_DOGRULAMA.md).
+Workers renew the job lease and workspace heartbeat while inference is running. Renewal is
+token-fenced and rejects expired, reassigned or cancelled jobs. Recovery probes use 64 tokens;
+batch probe startup may wait for an old slot lease to expire, while interactive admission
+keeps its short wait budget.
 
 ## Extraction pipeline upgrades
 
@@ -248,13 +255,12 @@ Retrying its current failed revision creates a fresh revision/job under the new 
 The retry API returns that job; follow its new ID. Published revisions remain searchable until
 a replacement is successfully published. Existing notes are not bulk reindexed on startup.
 
-The bounded citation-chain check is a provenance guard. Earlier semantic failures are retained
-in the historical quality reports; final regression and fresh holdout passed the sampled local
-acceptance. Model-only disagreement after one repair is visible as `semantic_review_uncertain`;
+The bounded citation-chain check is a provenance guard, not proof of semantic correctness.
+Model-only disagreement after one repair is visible as `semantic_review_uncertain`;
 schema/citation/known-type errors remain hard failures. Limited source-qualifier fallback
-preserves possible/planned wording and does not infer confirmed use. See [delivery](TESLIM_RAPORU.md).
+preserves possible/planned wording and does not infer confirmed use. See
+[evaluation and review semantics](../evaluation/README.md#metrics-and-interpretation).
 
 The Nginx UI uses Docker's embedded DNS resolver with a five-second cache and a variable
-upstream, so recreating API does not require recreating UI. The final API-recreation check
-passed with the UI container unchanged. See [Nginx variable proxy resolution](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass)
+upstream, so recreating API does not require recreating UI. See [Nginx variable proxy resolution](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass)
 and [Docker DNS services](https://docs.docker.com/engine/network/#dns-services).

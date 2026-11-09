@@ -1,30 +1,32 @@
-﻿# Evaluation
+# Evaluation
 
-The baseline is `notes.jsonl` (9 notes) and `questions.jsonl` (16 questions: 11 answerable,
-5 unanswerable). `notes.validation.jsonl` and `questions.validation.jsonl` add an independent
-6-note/8-question set covering Turkish, English, negation, uncertain future statements,
-conflicting sources, same-name entities and multi-note questions. The baseline is for development.
-After inspecting validation failures on 7 November, validation is a **regression** set, not an
-unseen test. `notes.holdout.jsonl` (8 notes) and `questions.holdout.jsonl` (10 questions) were
-written and frozen before the next final measurement. Run them with `--split holdout` on a
-separate empty target. Do not tune prompts, thresholds or labels after seeing those results.
-This agent-authored small holdout is not an independent human assessment.
+The datasets are small, agent-authored engineering checks, not independent human assessments.
+The baseline is for development. Validation and holdout failures have already been inspected;
+all existing splits should be treated as regression data for future changes.
 
-On 8 November, `holdout` became regression data for the next changes. A fresh `holdout2`
-contains 8 notes / 12 questions, including positive language-use evidence as well as absent
-personal attributes, approved plans, possibility and explicitly incompatible only-primary
-database records. Use `--split holdout2` on a fresh empty target. Freeze source, prompts,
-dataset and thresholds before inspecting its results; do not tune on that run.
+| Split | Notes | Questions |
+| --- | --- | --- |
+| baseline | 9 | 16 |
+| validation | 6 | 8 |
+| holdout | 8 | 10 |
+| holdout2 | 8 | 12 |
+| holdout3 | 8 | 12 |
+| holdout4 | 5 | 8 |
 
-The positive-language probes made holdout2 and holdout3 development/regression data.
-The final unseen-before-freeze set is **holdout4**, with 5 notes / 8 questions.
-Source, prompts, data and thresholds were frozen before inspecting it. Two passes across
-three methods completed 48 requests with no errors; each method answered 12/12 answerable
-cases and correctly abstained on 4/4 absent cases, evidence recall 1.000. Five annotated
-claims matched exactly. No model/prompt/dataset/threshold tuning followed this run.
-A subsequent English/Turkish absence-message selection fix and Nginx DNS fix are documented
-separately in [delivery](../docs/TESLIM_RAPORU.md). This small agent-authored set is not
-independent human certification; `quality_approved` intentionally remains false.
+For a new independent measurement, use a fresh dataset and freeze source, prompts, data and
+thresholds before inspecting results. Do not tune prompts, thresholds or labels on that run.
+Keep failed extractions and questions in the results.
+
+Historical measurement (8 November 2026): Qwen3 8B with Nomic 768-dimensional embeddings ran
+holdout4 twice across three methods, completing 48 requests with no errors. Each method answered
+12/12 answerable cases and correctly abstained on 4/4 absent cases, with evidence recall 1.000;
+five annotated claims matched exactly. Local evidence remains under
+`reports/evaluation-delivery-holdout4/` and `reports/delivery-freeze.json`.
+No model/prompt/dataset/threshold tuning followed that measurement. Subsequent absence-message
+language selection and Nginx DNS fixes were not part of the frozen source, so these results do
+not describe a re-evaluation of the final patched service. They also do not certify the later
+Qwen3.5-9B launcher profile. `quality_approved` intentionally remains false pending independent
+semantic review; valid citations alone cannot establish answer quality.
 
 ## Demo
 
@@ -126,7 +128,7 @@ plus source/prompt hashes. Review is not an independent truth oracle.
 Extraction wire output is relationship-first (`relations`); it is converted to the unchanged
 internal claim representation before ontology, identity and exact source validation. The
 pipeline fingerprint changes, so a pre-upgrade job cannot reuse staged chunks under the new
-extractor. See [8 November quality work](../docs/KALITE_DOGRULAMA_V3.md).
+extractor. See [pipeline upgrades](../docs/operations.md#extraction-pipeline-upgrades).
 
 An optional `--thresholds path/to/agreed.json` checks `min_evidence_recall`,
 `min_abstention_rate`, `max_errors` and `max_end_to_end_p95_ms` for selected `modes`.
@@ -137,8 +139,6 @@ and is included in the report.
 
 The initial engineering targets are in `evaluation/thresholds.example.json`.
 Use `--thresholds evaluation/thresholds.example.json` to apply them explicitly.
-The 7 November live baseline/validation results and agent review limitations are
-summarized in [the verification report](../docs/ARAYUZ_ONCESI_DOGRULAMA.md).
 
 With small datasets, percentages are unstable. Report counts and model versions, not a single
 unqualified accuracy number. GPU/model tests are opt-in and are not part of normal CI.
