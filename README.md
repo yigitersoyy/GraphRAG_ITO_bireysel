@@ -31,10 +31,11 @@ Demo mode uses deterministic fake providers. Its answers show that the pipeline 
 that the model answers well. Real answers need LM Studio with models. Notes are stored in the
 `neo4j_data` volume. The API has no authentication, so keep the ports bound to `127.0.0.1`.
 
-On Windows without `openssl`, use Git Bash or set `NEO4J_PASSWORD` to a value you choose.
-The images are `linux/amd64`. To update, run `docker compose -f compose.hub.yaml pull` and
-then `docker compose -f compose.hub.yaml up -d`. Stop with
-`docker compose -f compose.hub.yaml down`.
+On Windows without `openssl`, use Git Bash or set `NEO4J_PASSWORD` to a value you choose. In
+PowerShell 5.1 use `Set-Content .env "NEO4J_PASSWORD=your-value" -Encoding ascii`; the `>`
+redirect writes UTF-16 and Compose rejects that file. The images are `linux/amd64`. To update,
+run `docker compose -f compose.hub.yaml pull` and then `docker compose -f compose.hub.yaml up -d`.
+Stop with `docker compose -f compose.hub.yaml down`; notes stay in the volume unless you add `-v`.
 
 ## Workspace
 
