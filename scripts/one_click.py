@@ -174,7 +174,9 @@ def ensure_models(lms: str, settings: Settings, values: dict[str, str]) -> None:
             "--identifier",
             alias,
             "--gpu",
-            values.get("LAUNCH_CHAT_GPU", "0.8") if kind == "llm" else "off",
+            values.get("LAUNCH_CHAT_GPU", "0.8")
+            if kind == "llm"
+            else values.get("LAUNCH_EMBED_GPU", "off"),
             "-y",
         ]
         if kind == "llm":

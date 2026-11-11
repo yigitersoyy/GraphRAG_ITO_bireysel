@@ -32,7 +32,7 @@ HOP_HEADERS = {
 def create_frontend(upstream: str, directory: Path = DIST) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        async with httpx.AsyncClient(base_url=upstream, timeout=240, trust_env=False) as client:
+        async with httpx.AsyncClient(base_url=upstream, timeout=960, trust_env=False) as client:
             app.state.client = client
             yield
 

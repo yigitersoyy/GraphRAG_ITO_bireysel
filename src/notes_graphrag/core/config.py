@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     embedding_query_template: str = QUERY_TEMPLATE_V1
     embedding_document_prefix: str = ""
     lm_studio_context_tokens: int = 8192
-    extraction_max_output_tokens: int = 2048
-    answer_max_output_tokens: int = 1024
+    extraction_max_output_tokens: int = 4096
+    answer_max_output_tokens: int = 2048
 
     max_note_bytes: int = 1_048_576
     max_note_chars: int = 100_000
@@ -56,9 +56,9 @@ class Settings(BaseSettings):
     max_provider_calls_per_job: int = 64
     job_max_attempts: int = 3
     job_lease_seconds: int = 180
-    provider_timeout_seconds: float = 120
-    question_timeout_seconds: float = 180
-    inference_slot_wait_seconds: float = 30
+    provider_timeout_seconds: float = 300
+    question_timeout_seconds: float = 900
+    inference_slot_wait_seconds: float = 120
     idempotency_retention_days: int = 30
     deleted_content_retention_days: float = 1.0
     maintenance_interval_seconds: float = 3600.0

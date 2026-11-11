@@ -1,4 +1,9 @@
-import type { Core, EdgeSingular, StylesheetJson } from "cytoscape";
+import type {
+  Core,
+  EdgeSingular,
+  NodeSingular,
+  StylesheetJson,
+} from "cytoscape";
 
 export const graphPalette = {
   background: "#1E2126",
@@ -136,6 +141,42 @@ export const graphStyle: StylesheetJson = [
   },
   { selector: ".hidden", style: { display: "none" } },
 ];
+
+export function graphStyleForTheme(light: boolean): StylesheetJson {
+  if (!light) return graphStyle;
+  return [
+    ...graphStyle,
+    {
+      selector: "node",
+      style: {
+        color: "#26394c",
+        "text-background-color": "#edf2f7",
+        "background-color": (node: NodeSingular) => {
+          const color = String(node.data("color"));
+          const rgb = color.match(/^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+          return rgb
+            ? `rgb(${rgb
+                .slice(1)
+                .map((part) => Math.round(parseInt(part, 16) * 0.6))
+                .join(",")})`
+            : color;
+        },
+      },
+    },
+    {
+      selector: "edge",
+      style: { color: "#425b70", "text-background-color": "#edf2f7" },
+    },
+    {
+      selector: "node.hovered, node.selected, node.answer-related",
+      style: { "border-color": "#7b731d" },
+    },
+    {
+      selector: "edge.selected, edge.hovered, edge.answer-related",
+      style: { "line-color": "#216b7d", "target-arrow-color": "#216b7d" },
+    },
+  ];
+}
 
 export function fitOverview(cy: Core) {
   cy.fit(undefined, 75);

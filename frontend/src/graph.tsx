@@ -15,10 +15,11 @@ import type {
   SharedEdge,
 } from "./types";
 import { applyAnswerFocus, nodeSize } from "./graphFocus";
+import { documentName } from "./text";
 import { createGraphMotion } from "./graphMotion";
 import {
   graphPalette,
-  graphStyle,
+  graphStyleForTheme,
   pointColor,
   fitOverview,
   packComponents,
@@ -166,10 +167,22 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
       maxZoom: 8,
       wheelSensitivity: 0.22,
       boxSelectionEnabled: false,
-      style: graphStyle,
+      style: graphStyleForTheme(
+        document.documentElement.dataset.theme === "light",
+      ),
       layout: { name: "preset" },
     });
     cyRef.current = cy;
+    const themeObserver = new MutationObserver(() => {
+      cy.style(
+        graphStyleForTheme(document.documentElement.dataset.theme === "light"),
+      );
+      syncDisplay();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
     cy.on("zoom", syncDisplay);
     cy.on("tap", "node", (e) => {
       const n = e.target as NodeSingular;
@@ -236,6 +249,7 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
     });
     observer.observe(host.current);
     return () => {
+      themeObserver.disconnect();
       observer.disconnect();
       motion.current?.dispose();
       motion.current = null;
@@ -375,7 +389,7 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
               noteId: n.note_id,
               topicId: id,
               kind: "note",
-              label: n.title || "Başlıksız not",
+              label: documentName(n.title) || "Başlıksız not",
               color,
               state: n.state,
             },
@@ -411,7 +425,7 @@ const Graph = forwardRef<GraphHandle, Props>(function Graph(props, ref) {
       collections.forEach((notes, key) => {
         if (notes.length < 2) return;
         const id = "collection:" + key;
-        const name = notes[0].title
+        const name = documentName(notes[0].title)
           .replace(/[_\-](?:bolum|bölüm|part|chapter|section)[_\-]\d+$/iu, "")
           .replace(/^\d+[_\-]/, "")
           .replace(/_/g, " ");

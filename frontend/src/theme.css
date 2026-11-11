@@ -1,0 +1,61 @@
+@layer base {
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --page: #f5f7fa;
+    --surface: #ffffff;
+    --surface-raised: #edf1f6;
+    --surface-hover: #e2e8f0;
+    --text: #202b3b;
+    --muted: #556477;
+    --subtle: #687588;
+    --border: #c7d0dc;
+    --separator: #202b3b1c;
+    --wash: #203c6009;
+    --accent: #1769a7;
+    --accent-hover: #2581c7;
+    --accent-ink: #ffffff;
+    --link: #165f9b;
+    --success: #28724b;
+    --warning: #825713;
+    --danger: #a33c32;
+    --graph-bg: #edf2f7;
+    --graph-overlay: #edf2f7f2;
+    --graph-surface: #fffffff2;
+    --graph-text: #26394c;
+    --graph-muted: #4b6479;
+    --graph-accent: #216b7d;
+    --graph-hub: #7b731d;
+  }
+}
+
+@layer components {
+  :root[data-theme="light"] .graph-types i,
+  :root[data-theme="light"] .graph-legend .color-dot {
+    filter: brightness(0.6);
+  }
+  .theme-toggle {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted, #a5a5a3);
+  }
+  .theme-toggle:hover:not(:disabled) {
+    color: var(--text, #eeeeec);
+  }
+}
+
+@layer responsive {
+  @media (max-width: 760px) {
+    .graph-legend {
+      max-height: 40%;
+      overflow-y: auto;
+    }
+    .theme-toggle span {
+      display: none;
+    }
+    .top-actions .theme-toggle {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 8px;
+    }
+  }
+}

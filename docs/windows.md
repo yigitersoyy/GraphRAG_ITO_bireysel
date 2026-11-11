@@ -92,14 +92,14 @@ Compose projesi `notes-graphrag-persistent-demo`, veri volume'u bu proje adına 
 
 ## Gerçek LM Studio kullanımı
 
-Başlatıcının Qwen3.5 9B sohbet ve Nomic embedding profiline uygun örnek kurulum
+Bu bilgisayardaki Qwen3.5 9B sohbet ve Qwen3 Embedding 0.6B Q8_0 profiline uygun örnek kurulum
 aşağıdadır. Uygulama model kimliklerini `.env` dosyasından alır; `.env.example` sohbet
 kimliklerini boş bırakır ve farklı bir embedding profili içerir. Aşağıdaki örneği kullanırken
 kimlik, boyut ve ön işleme alanlarının tamamını birlikte ayarlayın. Yerel sunucu ve modeller için:
 
 ```powershell
 lms load qwen/qwen3.5-9b --identifier qwen/qwen3.5-9b --context-length 8192 --gpu 0.8 --parallel 1 -y
-lms load text-embedding-nomic-embed-text-v1.5 --identifier graphrag-embed --gpu off -y
+lms load text-embedding-qwen3-embedding-0.6b --identifier graphrag-qwen-embed --gpu max --context-length 8192 -y
 lms server start --port 1234 --bind 127.0.0.1
 ```
 
@@ -111,15 +111,17 @@ ANSWER_MODEL=qwen/qwen3.5-9b
 CHAT_TEMPERATURE=0.2
 LLM_INSTRUCTION_SUFFIX=""
 CHAT_TEMPLATE_ENABLE_THINKING=false
-EMBEDDING_MODEL=graphrag-embed
-EMBEDDING_DIMENSIONS=768
-EMBEDDING_PROFILE=nomic-embed-text-v1.5-q4km-768-v1
-EMBEDDING_QUERY_TEMPLATE="search_query: {question}"
-EMBEDDING_DOCUMENT_PREFIX="search_document: "
+EMBEDDING_MODEL=graphrag-qwen-embed
+EMBEDDING_DIMENSIONS=1024
+EMBEDDING_PROFILE=qwen3-embedding-0.6b-q8-1024-v1
+EMBEDDING_QUERY_TEMPLATE="Instruct: Given a question about personal notes, retrieve passages that answer the question.\nQuery:{question}"
+EMBEDDING_DOCUMENT_PREFIX=""
+LAUNCH_EMBED_MODEL=Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf
+LAUNCH_EMBED_GPU=max
 LM_STUDIO_CONTEXT_TOKENS=8192
 ```
 
-Nomic için sorgu ve belge önekleri [modelin kendi belgesinde](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5) açıklanır. Türkçe kalite ayrıca ölçülmelidir; çalışan bağlantı kaliteli cevap garantisi değildir.
+Qwen embedding için sorguya görev talimatı eklenir, belgelere önek eklenmez; [modelin kendi belgesine](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B) bakın. Türkçe kalite ayrıca ölçülmelidir; çalışan bağlantı kaliteli cevap garantisi değildir.
 
 Qwen3.5 için eski `/no_think` son eki kaldırıldı. `CHAT_TEMPLATE_ENABLE_THINKING=false` ile JSON/text çağrılarında `chat_template_kwargs.enable_thinking=false` ve LM Studio'da doğrulanan `reasoning_effort=none` gönderilir. Düşünme ayarı probe ve pipeline parmak izine dahildir. [Qwen3.5 model kartı](https://huggingface.co/Qwen/Qwen3.5-9B).
 

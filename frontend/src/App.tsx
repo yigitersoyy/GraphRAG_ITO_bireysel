@@ -27,6 +27,8 @@ import {
 import { Search } from "./Search";
 import { DeletedNotes } from "./DeletedNotes";
 import { dateLabel, ErrorMessage, Icon, IconButton, StateLabel } from "./ui";
+import { applyTheme, initialTheme } from "./theme";
+import { documentName } from "./text";
 
 type View = "graph" | "list" | "topics";
 type Panel =
@@ -34,6 +36,15 @@ type Panel =
 const emptyPage: NotePage = { items: [], total: 0, next_cursor: null };
 
 export default function App() {
+  const [theme, setTheme] = useState(initialTheme);
+  useEffect(() => {
+    applyTheme(theme);
+    try {
+      localStorage.setItem("workspace-theme", theme);
+    } catch {
+      /* Keep the toggle usable. */
+    }
+  }, [theme]);
   const [view, setView] = useState<View>(() => {
     const v = localStorage.getItem("workspace-view");
     return v === "list" || v === "topics" || v === "graph"
@@ -359,7 +370,7 @@ export default function App() {
             ⠿
           </span>
           <Icon name="note" size={15} />
-          <span>{n.title || "Başlıksız not"}</span>
+          <span title={n.title}>{documentName(n.title) || "Başlıksız not"}</span>
         </button>
         <span
           className="note-topic note-move-control"
@@ -416,6 +427,18 @@ export default function App() {
           <strong>Notlar</strong>
         </div>
         <div className="top-actions">
+          <button
+            type="button"
+            className="theme-toggle"
+            aria-label={
+              theme === "dark" ? "Gündüz moduna geç" : "Gece moduna geç"
+            }
+            title={theme === "dark" ? "Gündüz moduna geç" : "Gece moduna geç"}
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            <Icon name={theme === "dark" ? "sun" : "moon"} />
+            <span>{theme === "dark" ? "Gündüz" : "Gece"}</span>
+          </button>
           <button className="mode-button" onClick={() => openPanel("system")}>
             <span
               className={

@@ -129,8 +129,8 @@ Run `.\scripts\start.ps1 -Mode live -Build` (or `scripts/runtime.py start --mode
 It migrates, records gated capability probes from the container, then checks API readiness
 and worker heartbeat. It never falls back to demo providers when a real model fails.
 
-The Windows launcher profile uses Qwen3.5-9B for extraction/answers and a separate Nomic
-768-dimensional embedding model. Configure the actual served IDs and preprocessing as described
+The current Windows profile uses Qwen3.5-9B for extraction/answers and a separate Qwen3 Embedding
+0.6B Q8_0 model with 1024-dimensional vectors. Configure the actual served IDs and preprocessing as described
 in the [Windows guide](docs/windows.md); `.env.example` leaves chat IDs unset and uses a different
 embedding profile. Model/profile changes require compatible indexes and fresh capability probes.
 Connection probes and valid citation offsets do not establish semantic answer quality.

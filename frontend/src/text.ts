@@ -1,3 +1,13 @@
+export function documentName(title: string): string {
+  const match = title.trim().match(/^[A-Z]{1,4}\d{2,}[_\s-]+(.+)$/i);
+  if (!match) return title;
+  return match[1]
+    .replace(/\.(txt|md|pdf|docx|xlsx|xls)$/i, "")
+    .replace(/[_\s-]+(?:part|bolum|bölüm|chapter|section)[_\s-]+\d+$/iu, "")
+    .replace(/[_\s]+/g, " ")
+    .trim() || title;
+}
+
 export function evidenceParts(
   text: string,
   evidence: { start_char: number; end_char: number; quote: string },

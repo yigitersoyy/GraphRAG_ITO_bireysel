@@ -9,6 +9,10 @@ from notes_graphrag.persistence.workspace import Topic
 @pytest.mark.parametrize(
     "title,expected",
     [
+        ("M02_TEDBIRLER_YONETMELIK_PART_003", "TEDBIRLER YONETMELIK"),
+        ("P03 PAYTR_INFORMATION_SECURITY_POLICY", "PAYTR INFORMATION SECURITY POLICY"),
+        ("P03_PAYTR_INFORMATION_SECURITY_POLICY.pdf", "PAYTR INFORMATION SECURITY POLICY"),
+        ("M01_5549_KANUN", "5549 KANUN"),
         ("01_kvkk_6698_kanun_bolum_01", "KVKK"),
         ("01_kvkk_6698_kanun_bolum_02.pdf", "KVKK"),
         ("02_kvkk_veri_imha_yonetmeligi_bolum_01", "KVKK"),

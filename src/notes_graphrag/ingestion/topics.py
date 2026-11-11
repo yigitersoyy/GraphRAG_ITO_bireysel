@@ -14,6 +14,16 @@ from notes_graphrag.persistence.workspace import COLORS, Topic, fold
 
 def suggested_topic(title: str, topics: Sequence[Topic] = ()) -> str | None:
     name = re.sub(r"\.(txt|md|pdf|docx|xlsx|xls)$", "", title.strip(), flags=re.I)
+    coded = re.match(r"^[A-Z]{1,4}\d{2,}[_\s-]+(.+)$", name, flags=re.I)
+    if coded:
+        family = re.sub(
+            r"[_\s-]+(?:part|bolum|bölüm|chapter|section)[_\s-]+\d+$",
+            "", coded.group(1), flags=re.I,
+        )
+        family = re.sub(r"[_\s]+", " ", family).strip()
+        if 2 <= len(family) <= 80 and any(c.isalpha() for c in family):
+            return next((t.name for t in topics if fold(t.name) == fold(family)), family)
+        return None
     name = re.sub(r"^\d+[_.\-\s]+", "", name)
     words = re.sub(r"[_\-\s]+", " ", name).strip()
     # Respect names already chosen by the user, including multiword topics.

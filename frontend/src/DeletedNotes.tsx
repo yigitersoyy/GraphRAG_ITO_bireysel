@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, errorText } from "./api";
 import type { DeletedNotePage } from "./types";
 import { ErrorMessage } from "./ui";
+import { documentName } from "./text";
 
 const empty: DeletedNotePage = { items: [], total: 0, next_cursor: null };
 const dates = new Intl.DateTimeFormat("tr-TR", {
@@ -65,7 +66,7 @@ export function DeletedNotes({ revision }: { revision: string }) {
                 data-deleted-note={note.note_id}
               >
                 <span className="deleted-title">
-                  {note.title || "İçeriği temizlenmiş not"}
+                  {documentName(note.title) || "İçeriği temizlenmiş not"}
                 </span>
                 <time dateTime={note.deleted_at}>
                   {dates.format(new Date(note.deleted_at))}
